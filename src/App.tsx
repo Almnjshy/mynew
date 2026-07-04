@@ -8,8 +8,14 @@ import GameScreen from './screens/GameScreen'
 import MatchEndScreen from './screens/MatchEndScreen'
 import SettingsScreen from './screens/SettingsScreen'
 import StatisticsScreen from './screens/StatisticsScreen'
+import AchievementsScreen from './screens/AchievementsScreen'
+import HistoryScreen from './screens/HistoryScreen'
+import ProfileScreen from './screens/ProfileScreen'
+import LeaderboardScreen from './screens/LeaderboardScreen'
 import WifiGameScreen from './screens/WifiGameScreen'
 import OnlineGameScreen from './screens/OnlineGameScreen'
+import AchievementToast from './components/AchievementToast'
+import MusicPlayer from './components/MusicPlayer'
 
 function App() {
   const { screen } = useGameStore()
@@ -19,7 +25,7 @@ function App() {
       if (e.touches.length > 1) e.preventDefault()
     }
     document.addEventListener('touchmove', preventZoom, { passive: false })
-    
+
     let lastTouch = 0
     const preventDoubleTap = (e: TouchEvent) => {
       const now = Date.now()
@@ -36,6 +42,8 @@ function App() {
 
   return (
     <div className="app-container">
+      <MusicPlayer />
+      <AchievementToast />
       {screen === 'title' && <TitleScreen />}
       {screen === 'menu' && <MainMenu />}
       {screen === 'levelSelect' && <LevelSelect />}
@@ -43,6 +51,10 @@ function App() {
       {screen === 'matchEnd' && <MatchEndScreen />}
       {screen === 'settings' && <SettingsScreen />}
       {screen === 'statistics' && <StatisticsScreen />}
+      {screen === 'achievements' && <AchievementsScreen />}
+      {screen === 'history' && <HistoryScreen />}
+      {screen === 'profile' && <ProfileScreen />}
+      {screen === 'leaderboard' && <LeaderboardScreen />}
       {screen === 'wifiGame' && <WifiGameScreen />}
       {screen === 'onlineGame' && <OnlineGameScreen />}
     </div>
