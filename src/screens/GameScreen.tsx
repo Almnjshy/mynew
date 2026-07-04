@@ -39,7 +39,7 @@ export default function GameScreen() {
     sessionStorage.setItem('gameStartTime', String(Date.now()))
 
     const state = createInitialState(
-      [playerName, '丕賱賰賲亘賷賵鬲乇'],
+      [playerName, 'الكمبيوتر'],
       [playerAvatar, '/assets/avatar_ai.png']
     )
     setGameState(state)
@@ -93,7 +93,7 @@ export default function GameScreen() {
       if (settings.gameMode === 'block' && !canPlayerPlay(gameState, 1)) {
         const newState = skipTurn(gameState)
         setGameState(newState)
-        setMessage('丕賱賰賲亘賷賵鬲乇 賱丕 賷爻鬲胤賷毓 丕賱賱毓亘 - 鬲禺胤賷')
+        setMessage('الكمبيوتر لا يستطيع اللعب - تخطي')
         setAiThinking(false)
         setTimerKey(prev => prev + 1)
         return
@@ -108,7 +108,7 @@ export default function GameScreen() {
 
           if (settings.gameMode === 'allFives' && result.newState.players[1].score > (gameState.players[1]?.score || 0)) {
             const gained = result.newState.players[1].score - (gameState.players[1]?.score || 0)
-            setMessage(`丕賱賰賲亘賷賵鬲乇 丨氐賱 毓賱賶 ${gained} 賳賯胤丞!`)
+            setMessage(`الكمبيوتر حصل على ${gained} نقطة!`)
           }
 
           setGameState(result.newState)
@@ -142,13 +142,13 @@ export default function GameScreen() {
     if (gameState.stock.length > 0 && settings.gameMode !== 'block') {
       const newState = drawFromStock(gameState, 0)
       setGameState(newState)
-      setMessage('丕賳鬲賴賶 丕賱賵賯鬲! 爻丨亘 鬲賱賯丕卅賷')
+      setMessage('انتهى الوقت! سحب تلقائي')
       playerDrawCountRef.current += 1
       playerHasDrawnRef.current = true
     } else {
       const newState = skipTurn(gameState)
       setGameState(newState)
-      setMessage('丕賳鬲賴賶 丕賱賵賯鬲! 鬲禺胤賷 丕賱丿賵乇')
+      setMessage('انتهى الوقت! تخطي الدور')
     }
     setSelectedTile(null)
     setTimerKey(prev => prev + 1)
@@ -170,7 +170,7 @@ export default function GameScreen() {
       ? state.players[0].score 
       : (isWin ? opponentScore : playerScore)
 
-    sessionStorage.setItem('lastWinner', state.winner?.name || '丕賱賰賲亘賷賵鬲乇')
+    sessionStorage.setItem('lastWinner', state.winner?.name || 'الكمبيوتر')
     sessionStorage.setItem('lastRoundPoints', String(pointsGained))
     sessionStorage.setItem('movesCount', String(moveCountRef.current))
 
@@ -211,7 +211,7 @@ export default function GameScreen() {
         setRoundEnded(true)
         setTimeout(() => {
           const newState = createInitialState(
-            [playerName, '丕賱賰賲亘賷賵鬲乇'],
+            [playerName, 'الكمبيوتر'],
             [playerAvatar, '/assets/avatar_ai.png']
           )
           setGameState(newState)
@@ -274,7 +274,7 @@ export default function GameScreen() {
       if (settings.gameMode === 'allFives') {
         const gained = result.newState.players[0].score - (gameState.players[0]?.score || 0)
         if (gained > 0) {
-          setMessage(`+${gained} 賳賯胤丞! 賲噩賲賵毓 丕賱兀胤乇丕賮 = 5`)
+          setMessage(`+${gained} نقطة! مجموع الأطراف = 5`)
         }
       }
 
@@ -288,7 +288,7 @@ export default function GameScreen() {
       }
     } else {
       soundEngine.playInvalid()
-      setMessage(result.message || '賱丕 賷賲賰賳 丕賱賱毓亘 賴賳丕')
+      setMessage(result.message || 'لا يمكن اللعب هنا')
     }
   }
 
@@ -297,14 +297,14 @@ export default function GameScreen() {
 
     if (settings.gameMode === 'block') {
       soundEngine.playInvalid()
-      setMessage('賳賲胤 丕賱丨馗乇: 賱丕 賷賲賰賳 丕賱爻丨亘!')
+      setMessage('نمط الحظر: لا يمكن السحب!')
       return
     }
 
     soundEngine.playDraw()
     const newState = drawFromStock(gameState, 0)
     setGameState(newState)
-    setMessage('爻丨亘鬲 賯胤毓丞 噩丿賷丿丞')
+    setMessage('سحبت قطعة جديدة')
     setSelectedTile(null)
     setTimerKey(prev => prev + 1)
 
@@ -319,7 +319,7 @@ export default function GameScreen() {
       soundEngine.playClick()
       const newState = skipTurn(gameState)
       setGameState(newState)
-      setMessage('鬲禺胤賷 丕賱丿賵乇')
+      setMessage('تخطي الدور')
       setSelectedTile(null)
       setTimerKey(prev => prev + 1)
     }
@@ -332,7 +332,7 @@ export default function GameScreen() {
       initMatchState(settings.targetScore)
     }
     const state = createInitialState(
-      [playerName, '丕賱賰賲亘賷賵鬲乇'],
+      [playerName, 'الكمبيوتر'],
       [playerAvatar, '/assets/avatar_ai.png']
     )
     setGameState(state)
@@ -370,13 +370,13 @@ export default function GameScreen() {
             </>
           ) : settings.gameMode === 'allFives' ? (
             <>
-              <span className="text-yellow-400">5锔忊儯</span>
+              <span className="text-yellow-400">5️⃣</span>
               <span>{player.score} - {ai.score}</span>
             </>
           ) : (
             <>
               <span className="text-lg">{modeConfig.icon}</span>
-              <span>丕賱噩賵賱丞 {gameState.round}</span>
+              <span>الجولة {gameState.round}</span>
             </>
           )}
         </div>
@@ -409,7 +409,7 @@ export default function GameScreen() {
         <div className="w-full px-4 py-1">
           <div className="bg-red-500/20 border border-red-500/40 rounded-lg px-3 py-1.5 flex items-center gap-2">
             <Lock size={16} className="text-red-400 flex-shrink-0" />
-            <span className="text-red-200 text-sm">賱丕 賷賲賰賳賰 丕賱賱毓亘 - 丕囟睾胤 鬲禺胤賷</span>
+            <span className="text-red-200 text-sm">لا يمكنك اللعب - اضغط تخطي</span>
           </div>
         </div>
       )}
@@ -418,16 +418,16 @@ export default function GameScreen() {
       {roundEnded && (
         <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-40">
           <div className="bg-gray-900 rounded-xl p-6 text-center max-w-xs">
-            <div className="text-3xl mb-2">馃幆</div>
-            <h3 className="text-white text-xl font-bold mb-2">賳賴丕賷丞 丕賱噩賵賱丞!</h3>
+            <div className="text-3xl mb-2">🎯</div>
+            <h3 className="text-white text-xl font-bold mb-2">نهاية الجولة!</h3>
             {matchState && (
               <div className="text-white/80 text-sm">
-                <div>賳賯丕胤賰: {matchState.playerTotal}</div>
-                <div>賳賯丕胤 丕賱禺氐賲: {matchState.opponentTotal}</div>
-                <div className="text-yellow-400 mt-2">丕賱賴丿賮: {matchState.targetScore}</div>
+                <div>نقاطك: {matchState.playerTotal}</div>
+                <div>نقاط الخصم: {matchState.opponentTotal}</div>
+                <div className="text-yellow-400 mt-2">الهدف: {matchState.targetScore}</div>
               </div>
             )}
-            <div className="text-white/60 text-sm mt-3">噩賵賱丞 賯丕丿賲丞...</div>
+            <div className="text-white/60 text-sm mt-3">جولة قادمة...</div>
           </div>
         </div>
       )}
@@ -437,18 +437,18 @@ export default function GameScreen() {
         <img src={ai.avatar} alt="AI" className="avatar-img" />
         <div className="text-white">
           <div className="font-bold">{ai.name}</div>
-          <div className="text-sm opacity-70">{ai.hand.length} 賯胤毓</div>
+          <div className="text-sm opacity-70">{ai.hand.length} قطع</div>
           {settings.gameMode === 'allFives' && (
-            <div className="text-yellow-400 text-sm">{ai.score} 賳賯胤丞</div>
+            <div className="text-yellow-400 text-sm">{ai.score} نقطة</div>
           )}
         </div>
-        {aiThinking && <div className="text-yellow-400 text-sm animate-pulse">賷賮賰乇...</div>}
+        {aiThinking && <div className="text-yellow-400 text-sm animate-pulse">يفكر...</div>}
       </div>
 
       {/* Board */}
       <div className="flex-1 flex items-center justify-center w-full overflow-hidden px-4">
         {gameState.board.length === 0 ? (
-          <div className="text-white/50 text-lg">丕亘丿兀 丕賱賱毓亘 亘兀賷 賯胤毓丞</div>
+          <div className="text-white/50 text-lg">ابدأ اللعب بأي قطعة</div>
         ) : (
           <div className="flex items-center gap-1 overflow-x-auto py-4 w-full justify-center">
             {gameState.board.map((tile, i) => (
@@ -472,9 +472,9 @@ export default function GameScreen() {
         <img src={player.avatar} alt="Player" className="avatar-img" />
         <div className="text-white">
           <div className="font-bold">{player.name}</div>
-          <div className="text-sm opacity-70">{player.hand.length} 賯胤毓丞</div>
+          <div className="text-sm opacity-70">{player.hand.length} قطعة</div>
           {settings.gameMode === 'allFives' && (
-            <div className="text-yellow-400 text-sm">{player.score} 賳賯胤丞</div>
+            <div className="text-yellow-400 text-sm">{player.score} نقطة</div>
           )}
         </div>
       </div>
@@ -500,7 +500,7 @@ export default function GameScreen() {
               >
                 {isBestMove && (
                   <div className="absolute -top-2 -right-2 bg-green-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold z-10">
-                    鈽�
+                    ★
                   </div>
                 )}
 
@@ -520,8 +520,8 @@ export default function GameScreen() {
                             : 'bg-yellow-500 text-black'
                         }`}
                       >
-                        {end === 'left' ? '鈫�' : '鈫�'}
-                        {bestMove?.tileIndex === index && bestMove?.end === end && ' 鈽�'}
+                        {end === 'left' ? '←' : '→'}
+                        {bestMove?.tileIndex === index && bestMove?.end === end && ' ★'}
                       </button>
                     ))}
                   </div>
@@ -544,8 +544,8 @@ export default function GameScreen() {
           }`}
         >
           {settings.showHints && shouldDraw(gameState, 0) && isPlayerTurn && settings.gameMode !== 'block'
-            ? '爻丨亘 鈫� 賱丕 賷賵噩丿 丨乇賰丞'
-            : `爻丨亘 (${gameState.stock.length})`
+            ? 'سحب ← لا يوجد حركة'
+            : `سحب (${gameState.stock.length})`
           }
         </button>
 
@@ -554,7 +554,7 @@ export default function GameScreen() {
             onClick={handleSkip}
             className="game-btn flex-1 bg-red-600/80 text-white"
           >
-            鬲禺胤賷 丕賱丿賵乇
+            تخطي الدور
           </button>
         )}
       </div>
