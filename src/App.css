@@ -35,7 +35,6 @@
   background: linear-gradient(135deg, #d4a843 0%, #b8941f 100%);
 }
 
-/* الخلفيات الأصلية - زي ما كانت */
 .wood-bg {
   background-image: url('/assets/wood_panel.jpg');
   background-size: cover;
@@ -73,7 +72,6 @@
   object-fit: contain;
 }
 
-/* القطع الأصلية - أفقية */
 .domino-tile {
   width: 60px;
   height: 120px;
@@ -121,7 +119,6 @@
   position: absolute;
 }
 
-/* Board الأصلي - أفقي */
 .game-board {
   width: 100%;
   height: 100%;
