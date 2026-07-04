@@ -10,9 +10,9 @@ export default function Board({ board }: Props) {
   }
 
   return (
-    <div className="board-chain">
-      {board.map((tile) => (
-        <div key={tile.id} className="domino-tile" style={{ width: '50px', height: '100px' }}>
+    <div className="board-vertical">
+      {board.map((tile, index) => (
+        <div key={tile.id} className="domino-tile-vertical">
           <div className="half"><Dots count={tile.top} /></div>
           <div className="divider" />
           <div className="half"><Dots count={tile.bottom} /></div>
@@ -29,11 +29,11 @@ function Dots({ count }: { count: number }) {
     6: ['tl','tr','ml','mr','bl','br']
   }
   const map: Record<string, React.CSSProperties> = {
-    'tl': {top:6,left:6}, 'tr': {top:6,right:6},
-    'ml': {top:'50%',left:6,transform:'translateY(-50%)'},
-    'mr': {top:'50%',right:6,transform:'translateY(-50%)'},
+    'tl': {top:'20%',left:'20%'}, 'tr': {top:'20%',right:'20%'},
+    'ml': {top:'50%',left:'20%',transform:'translateY(-50%)'},
+    'mr': {top:'50%',right:'20%',transform:'translateY(-50%)'},
     'c': {top:'50%',left:'50%',transform:'translate(-50%,-50%)'},
-    'bl': {bottom:6,left:6}, 'br': {bottom:6,right:6},
+    'bl': {bottom:'20%',left:'20%'}, 'br': {bottom:'20%',right:'20%'},
   }
   return (
     <div className="relative w-full h-full">
