@@ -33,7 +33,7 @@ export default function AchievementToast() {
             <Trophy size={24} className="text-white" />
           </div>
           <div className="flex-1">
-            <div className="text-yellow-400 font-bold text-lg">� إنجاز جديد!</div>
+            <div className="text-yellow-400 font-bold text-lg">🎉 إنجاز جديد!</div>
             <div className="text-white font-bold">{unlockedAch.title}</div>
             <div className="text-white/70 text-sm">{unlockedAch.description}</div>
           </div>
