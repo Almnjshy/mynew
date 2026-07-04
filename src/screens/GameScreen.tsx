@@ -18,6 +18,7 @@ export default function GameScreen() {
     setGameState(state)
   }, [playerCount])
 
+  // AI Turn - for ANY AI player (not just player 1)
   useEffect(() => {
     if (!gameState || gameState.isGameOver) return
     const currentPlayer = gameState.players[gameState.currentPlayerIndex]
@@ -36,6 +37,7 @@ export default function GameScreen() {
           }
         }
       } else {
+        // AI draws from stock
         const newState = drawFromStock(gameState, gameState.currentPlayerIndex)
         setGameState(newState)
       }
@@ -112,7 +114,7 @@ export default function GameScreen() {
         </button>
       </div>
 
-      {/* AI Players (top) - ميزة جديدة */}
+      {/* AI Players (top) */}
       <div className="flex justify-center gap-2 px-2 py-1 flex-wrap">
         {gameState.players.slice(1).map((ai, idx) => (
           <div 
@@ -133,7 +135,7 @@ export default function GameScreen() {
         ))}
       </div>
 
-      {/* Board - الأصلي الأفقي */}
+      {/* Board - Original horizontal */}
       <div className="game-board flex-1">
         <div className="board-chain">
           {gameState.board.length === 0 ? (
