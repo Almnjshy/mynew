@@ -3,13 +3,11 @@ name: Build Android APK
 on:
   push:
     branches: [main, master]
-  pull_request:
-    branches: [main, master]
   workflow_dispatch:
 
 jobs:
-  build-web:
-    name: Build Web App
+  build:
+    name: Build & Release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,36 +17,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          # cache: 'npm'   ← شيلته!
 
       - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-
-      - name: Upload dist
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-dist
-          path: dist/
-
-  build-android:
-    name: Build Android APK
-    runs-on: ubuntu-latest
-    needs: build-web
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
+        run: npm install   ← غيرته!
 
       - name: Build web
         run: npm run build
@@ -62,16 +34,16 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Capacitor CLI
+      - name: Install Capacitor
         run: npm install -g @capacitor/cli
 
-      - name: Add Android platform
+      - name: Add Android
         run: npx cap add android
 
-      - name: Sync with Android
+      - name: Sync Android
         run: npx cap sync android
 
-      - name: Build Debug APK
+      - name: Build APK
         run: |
           cd android
           ./gradlew assembleDebug
@@ -79,16 +51,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: domino-debug-apk
+          name: domino-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Build Release APK
-        run: |
-          cd android
-          ./gradlew assembleRelease
-
-      - name: Upload Release APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: domino-release-apk
-          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
