@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useGameStore } from '@/store/gameStore'
 import { createInitialState, playTile, drawFromStock, getValidEnds, getAIMove, calculateScore } from '@/lib/gameEngine'
-import { GameState, TileEnd } from '@/types/game'
+import { GameState, DominoTile, TileEnd } from '@/types/game'
 import { ArrowLeft, RotateCcw } from 'lucide-react'
 
 export default function GameScreen() {
@@ -11,34 +11,34 @@ export default function GameScreen() {
   const [message, setMessage] = useState('')
   const [aiThinking, setAiThinking] = useState(false)
 
-  const playerCount = parseInt(sessionStorage.getItem('playerCount') || '2')
-
   useEffect(() => {
-    const state = createInitialState(playerCount)
+    const state = createInitialState(
+      ['أنت', 'الكمبيوتر'],
+      ['/assets/avatar_player.png', '/assets/avatar_ai.png']
+    )
     setGameState(state)
-  }, [playerCount])
+  }, [])
 
-  // AI Turn - for ANY AI player (not just player 1)
+  // AI Turn
   useEffect(() => {
     if (!gameState || gameState.isGameOver) return
-    const currentPlayer = gameState.players[gameState.currentPlayerIndex]
-    if (!currentPlayer.isAI) return
+    if (gameState.currentPlayerIndex !== 1) return
 
     setAiThinking(true)
     const timer = setTimeout(() => {
-      const aiMove = getAIMove(gameState, settings.difficulty, gameState.currentPlayerIndex)
-      
+      const aiMove = getAIMove(gameState, settings.difficulty)
+
       if (aiMove) {
-        const result = playTile(gameState, gameState.currentPlayerIndex, aiMove.tileIndex, aiMove.end)
+        const result = playTile(gameState, 1, aiMove.tileIndex, aiMove.end)
         if (result.valid && result.newState) {
           setGameState(result.newState)
-          if (result.newState.isGameOver && result.newState.winner) {
-            handleGameEnd(result.newState.winner.id === 'player-0', result.newState.winner.name)
+          if (result.newState.isGameOver) {
+            handleGameEnd(result.newState)
           }
         }
       } else {
         // AI draws from stock
-        const newState = drawFromStock(gameState, gameState.currentPlayerIndex)
+        const newState = drawFromStock(gameState, 1)
         setGameState(newState)
       }
       setAiThinking(false)
@@ -47,33 +47,34 @@ export default function GameScreen() {
     return () => clearTimeout(timer)
   }, [gameState, settings.difficulty])
 
-  const handleGameEnd = (isWin: boolean, winnerName?: string) => {
-    sessionStorage.setItem('lastWinner', winnerName || (isWin ? 'أنت' : 'الكمبيوتر'))
+  const handleGameEnd = (state: GameState) => {
+    const isWin = state.winner?.id === 'player-0'
     updateStatistics({
       gamesPlayed: 1,
       gamesWon: isWin ? 1 : 0,
       gamesLost: isWin ? 0 : 1,
+      totalScore: calculateScore(state.players[0].hand),
     })
     setTimeout(() => setScreen('matchEnd'), 2000)
   }
 
   const handleTileClick = (index: number) => {
-    if (!gameState || gameState.currentPlayerIndex !== 0 || aiThinking || gameState.isGameOver) return
+    if (!gameState || gameState.currentPlayerIndex !== 0 || aiThinking) return
     setSelectedTile(index === selectedTile ? null : index)
     setMessage('')
   }
 
   const handlePlay = (end: TileEnd) => {
     if (!gameState || selectedTile === null) return
-    
+
     const result = playTile(gameState, 0, selectedTile, end)
     if (result.valid && result.newState) {
       setGameState(result.newState)
       setSelectedTile(null)
       setMessage('')
-      
-      if (result.newState.isGameOver && result.newState.winner) {
-        handleGameEnd(result.newState.winner.id === 'player-0', result.newState.winner.name)
+
+      if (result.newState.isGameOver) {
+        handleGameEnd(result.newState)
       }
     } else {
       setMessage(result.message || 'لا يمكن اللعب هنا')
@@ -81,7 +82,7 @@ export default function GameScreen() {
   }
 
   const handleDraw = () => {
-    if (!gameState || gameState.currentPlayerIndex !== 0 || aiThinking || gameState.isGameOver) return
+    if (!gameState || gameState.currentPlayerIndex !== 0 || aiThinking) return
     const newState = drawFromStock(gameState, 0)
     setGameState(newState)
     setMessage('سحبت قطعة جديدة')
@@ -89,7 +90,10 @@ export default function GameScreen() {
   }
 
   const handleRestart = () => {
-    const state = createInitialState(playerCount)
+    const state = createInitialState(
+      ['أنت', 'الكمبيوتر'],
+      ['/assets/avatar_player.png', '/assets/avatar_ai.png']
+    )
     setGameState(state)
     setSelectedTile(null)
     setMessage('')
@@ -99,6 +103,7 @@ export default function GameScreen() {
   if (!gameState) return <div className="screen-container table-bg">Loading...</div>
 
   const player = gameState.players[0]
+  const ai = gameState.players[1]
   const isPlayerTurn = gameState.currentPlayerIndex === 0 && !gameState.isGameOver
 
   return (
@@ -114,28 +119,17 @@ export default function GameScreen() {
         </button>
       </div>
 
-      {/* AI Players (top) */}
-      <div className="flex justify-center gap-2 px-2 py-1 flex-wrap">
-        {gameState.players.slice(1).map((ai, idx) => (
-          <div 
-            key={ai.id} 
-            className={`flex items-center gap-2 px-2 py-1 rounded-lg ${
-              gameState.currentPlayerIndex === idx + 1 ? 'bg-yellow-500/30' : 'bg-black/20'
-            }`}
-          >
-            <img src={ai.avatar} alt={ai.name} className="w-8 h-8 rounded-full border border-yellow-500" />
-            <div className="text-white text-xs">
-              <div className="font-bold">{ai.name}</div>
-              <div>{ai.hand.length} قطع</div>
-            </div>
-            {gameState.currentPlayerIndex === idx + 1 && aiThinking && (
-              <span className="text-yellow-400 text-xs animate-pulse">يفكر...</span>
-            )}
-          </div>
-        ))}
+      {/* AI Player */}
+      <div className={`flex items-center gap-3 px-4 py-2 rounded-xl ${gameState.currentPlayerIndex === 1 ? 'bg-yellow-500/20' : ''}`}>
+        <img src={ai.avatar} alt="AI" className="avatar-img" />
+        <div className="text-white">
+          <div className="font-bold">{ai.name}</div>
+          <div className="text-sm opacity-70">{ai.hand.length} قطع</div>
+        </div>
+        {aiThinking && <span className="text-yellow-400 text-sm ai-thinking">يفكر...</span>}
       </div>
 
-      {/* Board - Original horizontal */}
+      {/* Board */}
       <div className="game-board flex-1">
         <div className="board-chain">
           {gameState.board.length === 0 ? (
@@ -157,23 +151,16 @@ export default function GameScreen() {
         <div className="text-yellow-400 text-center py-1 font-bold text-sm">{message}</div>
       )}
 
-      {/* Game Over Message */}
-      {gameState.isGameOver && gameState.winner && (
-        <div className="text-green-400 text-center py-1 font-bold text-lg animate-pulse">
-          {gameState.winner.name} فاز!
-        </div>
-      )}
-
       {/* Player Info & Hand */}
       <div className="flex flex-col items-center gap-2 px-4 py-2">
         <div className={`flex items-center gap-3 ${isPlayerTurn ? 'bg-yellow-500/20' : ''} rounded-xl p-2`}>
           <img src={player.avatar} alt="Player" className="avatar-img" />
           <div className="text-white text-center">
             <div className="font-bold">{player.name}</div>
-            <div className="text-sm opacity-70">{player.score} نقطة | {player.hand.length} قطع</div>
+            <div className="text-sm opacity-70">{player.score} نقطة</div>
           </div>
         </div>
-        
+
         <div className="player-hand w-full justify-center">
           {player.hand.map((tile, i) => (
             <div
@@ -198,7 +185,7 @@ export default function GameScreen() {
             ))}
           </div>
         )}
-        
+
         {isPlayerTurn && selectedTile === null && (
           <button onClick={handleDraw} className="game-btn game-btn-secondary px-6">
             سحب من المخزون ({gameState.stock.length})
