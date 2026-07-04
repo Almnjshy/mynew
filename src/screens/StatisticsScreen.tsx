@@ -1,5 +1,5 @@
 import { useGameStore } from '@/store/gameStore'
-import { ArrowLeft, Trophy, Gamepad2, Swords, Target } from 'lucide-react'
+import { ArrowLeft, Trophy, Gamepad2, Swords, Target, Medal, History } from 'lucide-react'
 
 export default function StatisticsScreen() {
   const { statistics, setScreen } = useGameStore()
@@ -22,6 +22,21 @@ export default function StatisticsScreen() {
           <StatRow icon={<Trophy size={24} />} label="أعلى نتيجة" value={statistics.highestScore} color="text-yellow-400" />
           <StatRow icon={<Target size={24} />} label="السلسلة" value={statistics.streak} />
         </div>
+
+        {/* Links */}
+        <button 
+          onClick={() => setScreen('achievements')}
+          className="game-btn game-btn-primary w-full gap-3"
+        >
+          <Medal size={24} /> الإنجازات
+        </button>
+
+        <button 
+          onClick={() => setScreen('history')}
+          className="game-btn game-btn-secondary w-full gap-3"
+        >
+          <History size={24} /> السجل
+        </button>
       </div>
     </div>
   )
