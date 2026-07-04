@@ -1,4 +1,4 @@
-import { DominoTile, Player, GameState, TileEnd, MoveResult } from '@/types/game'
+import { DominoTile, Player, GameState, TileEnd, MoveResult, GameMode } from '@/types/game'
 
 export const createDominoSet = (): DominoTile[] => {
   const tiles: DominoTile[] = []
@@ -105,6 +105,12 @@ export const playTile = (state: GameState, playerIndex: number, tileIndex: numbe
   const newPlayers = [...state.players]
   newPlayers[playerIndex] = { ...player, hand: newHand }
 
+  // Check for All Fives scoring
+  const allFivesScore = calculateAllFivesScore(newBoard)
+  if (allFivesScore > 0) {
+    newPlayers[playerIndex] = { ...newPlayers[playerIndex], score: newPlayers[playerIndex].score + allFivesScore }
+  }
+
   if (newHand.length === 0) {
     return {
       valid: true,
@@ -114,6 +120,7 @@ export const playTile = (state: GameState, playerIndex: number, tileIndex: numbe
         players: newPlayers,
         isGameOver: true,
         winner: newPlayers[playerIndex],
+        isBlocked: false,
       }
     }
   }
@@ -150,6 +157,19 @@ export const calculateScore = (hand: DominoTile[]): number => {
   return hand.reduce((sum, tile) => sum + tile.top + tile.bottom, 0)
 }
 
+export const calculateAllFivesScore = (board: DominoTile[]): number => {
+  if (board.length === 0) return 0
+
+  const leftEnd = board[0].top
+  const rightEnd = board[board.length - 1].bottom
+  const total = leftEnd + rightEnd
+
+  if (total % 5 === 0) {
+    return total
+  }
+  return 0
+}
+
 export const createInitialState = (playerNames: string[], playerAvatars: string[]): GameState => {
   const stock = createDominoSet()
   const players = createPlayers(playerNames, playerAvatars)
@@ -175,6 +195,7 @@ export const createInitialState = (playerNames: string[], playerAvatars: string[
     isGameOver: false,
     winner: null,
     lastMove: null,
+    isBlocked: false,
   }
 }
 
@@ -195,14 +216,90 @@ export const getAIMove = (state: GameState, difficulty: string): { tileIndex: nu
     return validMoves[Math.floor(Math.random() * validMoves.length)]
   }
 
-  // Medium/Hard: prefer doubles and high-value tiles
+  // Medium/Hard: prefer doubles, high-value tiles, and All Fives scoring
   validMoves.sort((a, b) => {
     const tileA = ai.hand[a.tileIndex]
     const tileB = ai.hand[b.tileIndex]
-    const scoreA = (tileA.top === tileA.bottom ? 10 : 0) + tileA.top + tileA.bottom
-    const scoreB = (tileB.top === tileB.bottom ? 10 : 0) + tileB.top + tileB.bottom
-    return scoreB - scoreA
+
+    // Simulate playing each move to check All Fives score
+    let scoreA = 0
+    let scoreB = 0
+
+    if (state.board.length > 0) {
+      const simBoardA = [...state.board]
+      const simBoardB = [...state.board]
+
+      // Simple simulation for scoring
+      const leftEnd = state.board[0].top
+      const rightEnd = state.board[state.board.length - 1].bottom
+
+      const valA = a.end === 'left' ? tileA.top : tileA.bottom
+      const valB = b.end === 'left' ? tileB.top : tileB.bottom
+
+      const totalA = leftEnd + rightEnd + valA
+      const totalB = leftEnd + rightEnd + valB
+
+      if (totalA % 5 === 0) scoreA += totalA
+      if (totalB % 5 === 0) scoreB += totalB
+    }
+
+    const baseA = (tileA.top === tileA.bottom ? 10 : 0) + tileA.top + tileA.bottom + scoreA
+    const baseB = (tileB.top === tileB.bottom ? 10 : 0) + tileB.top + tileB.bottom + scoreB
+
+    return baseB - baseA
   })
 
   return difficulty === 'hard' ? validMoves[0] : validMoves[Math.floor(Math.random() * Math.min(3, validMoves.length))]
+}
+
+/**
+ * Check if the game is blocked (no one can play)
+ */
+export const isGameBlocked = (state: GameState): boolean => {
+  for (let i = 0; i < state.players.length; i++) {
+    const player = state.players[i]
+    for (const tile of player.hand) {
+      const ends = getValidEnds(tile, state.board)
+      if (ends.length > 0) return false
+    }
+  }
+  return state.stock.length === 0
+}
+
+/**
+ * Get the winner in a blocked game (lowest hand score)
+ */
+export const getBlockedWinner = (state: GameState): Player | null => {
+  let winner = state.players[0]
+  let minScore = calculateScore(winner.hand)
+
+  for (let i = 1; i < state.players.length; i++) {
+    const score = calculateScore(state.players[i].hand)
+    if (score < minScore) {
+      minScore = score
+      winner = state.players[i]
+    }
+  }
+
+  return winner
+}
+
+/**
+ * Check if player can play any tile (for Block mode)
+ */
+export const canPlayerPlay = (state: GameState, playerIndex: number): boolean => {
+  const player = state.players[playerIndex]
+  for (const tile of player.hand) {
+    const ends = getValidEnds(tile, state.board)
+    if (ends.length > 0) return true
+  }
+  return false
+}
+
+/**
+ * Skip player turn (for Block mode)
+ */
+export const skipTurn = (state: GameState): GameState => {
+  const nextPlayer = (state.currentPlayerIndex + 1) % state.players.length
+  return { ...state, currentPlayerIndex: nextPlayer }
 }
