@@ -1,0 +1,48 @@
+import { useEffect } from 'react'
+import './App.css'
+import { useGameStore } from './store/gameStore'
+import TitleScreen from './screens/TitleScreen'
+import MainMenu from './screens/MainMenu'
+import LevelSelect from './screens/LevelSelect'
+import GameScreen from './screens/GameScreen'
+import MatchEndScreen from './screens/MatchEndScreen'
+import SettingsScreen from './screens/SettingsScreen'
+import StatisticsScreen from './screens/StatisticsScreen'
+
+function App() {
+  const { screen } = useGameStore()
+
+  useEffect(() => {
+    const preventZoom = (e: TouchEvent) => {
+      if (e.touches.length > 1) e.preventDefault()
+    }
+    document.addEventListener('touchmove', preventZoom, { passive: false })
+
+    let lastTouch = 0
+    const preventDoubleTap = (e: TouchEvent) => {
+      const now = Date.now()
+      if (now - lastTouch < 300) e.preventDefault()
+      lastTouch = now
+    }
+    document.addEventListener('touchend', preventDoubleTap, { passive: false })
+
+    return () => {
+      document.removeEventListener('touchmove', preventZoom)
+      document.removeEventListener('touchend', preventDoubleTap)
+    }
+  }, [])
+
+  return (
+    <div className="app-container">
+      {screen === 'title' && <TitleScreen />}
+      {screen === 'menu' && <MainMenu />}
+      {screen === 'levelSelect' && <LevelSelect />}
+      {screen === 'game' && <GameScreen />}
+      {screen === 'matchEnd' && <MatchEndScreen />}
+      {screen === 'settings' && <SettingsScreen />}
+      {screen === 'statistics' && <StatisticsScreen />}
+    </div>
+  )
+}
+
+export default App
