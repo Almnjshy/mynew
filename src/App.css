@@ -1,22 +1,80 @@
-/* Vertical Board Layout */
-.board-vertical {
+.app-container {
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 2px;
-  max-height: 100%;
-  overflow-y: auto;
-  padding: 8px;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  position: relative;
+  overflow: hidden;
 }
 
-.board-vertical::-webkit-scrollbar {
-  display: none;
+.game-wrapper {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
 }
 
-.domino-tile-vertical {
+.touch-target {
+  min-height: 48px;
+  min-width: 48px;
+}
+
+.no-callout {
+  -webkit-touch-callout: none;
+}
+
+.screen-transition {
+  transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+}
+
+.gold-accent {
+  color: #d4a843;
+}
+
+.gold-bg {
+  background: linear-gradient(135deg, #d4a843 0%, #b8941f 100%);
+}
+
+/* الخلفيات الأصلية - زي ما كانت */
+.wood-bg {
+  background-image: url('/assets/wood_panel.jpg');
+  background-size: cover;
+  background-position: center;
+}
+
+.table-bg {
+  background-image: url('/assets/table_bg.jpg');
+  background-size: cover;
+  background-position: center;
+}
+
+.title-bg {
+  background-image: url('/assets/title_bg.jpg');
+  background-size: cover;
+  background-position: center;
+}
+
+.gold-frame {
+  border: 4px solid transparent;
+  border-image: url('/assets/gold_frame.jpg') 30 round;
+}
+
+.avatar-img {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #d4a843;
+}
+
+.trophy-img {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+}
+
+/* القطع الأصلية - أفقية */
+.domino-tile {
   width: 60px;
   height: 120px;
   background: #f5f0e6;
@@ -25,23 +83,136 @@
   display: flex;
   flex-direction: column;
   position: relative;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
   box-shadow: 0 2px 4px rgba(0,0,0,0.3);
   flex-shrink: 0;
 }
 
-.board-smart {
+.domino-tile:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+}
+
+.domino-tile.selected {
+  border-color: #d4a843;
+  box-shadow: 0 0 12px rgba(212, 168, 67, 0.6);
+}
+
+.domino-tile .half {
+  flex: 1;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  max-height: 60vh;
-  overflow-y: auto;
-  padding: 8px;
+  position: relative;
+}
+
+.domino-tile .divider {
+  height: 2px;
+  background: #8b7355;
+  margin: 0 4px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  background: #1a1a2e;
+  border-radius: 50%;
+  position: absolute;
+}
+
+/* Board الأصلي - أفقي */
+.game-board {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 16px;
+}
+
+.board-chain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.player-hand {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  overflow-x: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-.board-smart::-webkit-scrollbar {
+.player-hand::-webkit-scrollbar {
   display: none;
+}
+
+.game-btn {
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 16px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.game-btn-primary {
+  background: linear-gradient(135deg, #d4a843 0%, #b8941f 100%);
+  color: #1a1a2e;
+}
+
+.game-btn-primary:active {
+  transform: scale(0.95);
+}
+
+.game-btn-secondary {
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.2);
+}
+
+.game-btn-secondary:active {
+  background: rgba(255,255,255,0.2);
+}
+
+.screen-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 20px;
+}
+
+.safe-area-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.ai-thinking {
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
