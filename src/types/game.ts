@@ -1,60 +1,54 @@
-export interface DominoTile {
-  top: number
-  bottom: number
-  id: string
-}
+name: Build Android APK
 
-export interface Player {
-  id: string
-  name: string
-  avatar: string
-  hand: DominoTile[]
-  isAI: boolean
-  score: number
-}
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
 
-export interface GameState {
-  board: DominoTile[]
-  players: Player[]
-  currentPlayerIndex: number
-  stock: DominoTile[]
-  round: number
-  isGameOver: boolean
-  winner: Player | null
-  lastMove: { playerId: string; tile: DominoTile; end: 'left' | 'right' } | null
-}
+jobs:
+  build:
+    name: Build & Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-export type GameScreen = 
-  | 'title' 
-  | 'menu' 
-  | 'levelSelect' 
-  | 'game' 
-  | 'matchEnd' 
-  | 'settings' 
-  | 'statistics'
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-export type Difficulty = 'easy' | 'medium' | 'hard'
+      - name: Install dependencies
+        run: npm install
 
-export interface GameSettings {
-  soundEnabled: boolean
-  musicEnabled: boolean
-  difficulty: Difficulty
-  showHints: boolean
-}
+      - name: Build web
+        run: npm run build
 
-export interface GameStatistics {
-  gamesPlayed: number
-  gamesWon: number
-  gamesLost: number
-  totalScore: number
-  highestScore: number
-  streak: number
-}
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
 
-export type TileEnd = 'left' | 'right'
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
-export interface MoveResult {
-  valid: boolean
-  message?: string
-  newState?: GameState
-}
+      - name: Install Capacitor
+        run: npm install -g @capacitor/cli
+
+      - name: Add Android
+        run: npx cap add android
+
+      - name: Sync Android
+        run: npx cap sync android
+
+      - name: Build APK
+        run: |
+          cd android
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: domino-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
