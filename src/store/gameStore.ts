@@ -1,32 +1,16 @@
 import { create } from 'zustand'
-import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
 
-// Capacitor storage adapter
-const capacitorStorage: StateStorage = {
+// Simple localStorage adapter (no external dependencies)
+const localStorageAdapter = {
   getItem: async (name: string): Promise<string | null> => {
-    try {
-      const { Preferences } = await import('@capacitor/preferences')
-      const { value } = await Preferences.get({ key: name })
-      return value
-    } catch {
-      return localStorage.getItem(name)
-    }
+    return localStorage.getItem(name)
   },
   setItem: async (name: string, value: string): Promise<void> => {
-    try {
-      const { Preferences } = await import('@capacitor/preferences')
-      await Preferences.set({ key: name, value })
-    } catch {
-      localStorage.setItem(name, value)
-    }
+    localStorage.setItem(name, value)
   },
   removeItem: async (name: string): Promise<void> => {
-    try {
-      const { Preferences } = await import('@capacitor/preferences')
-      await Preferences.remove({ key: name })
-    } catch {
-      localStorage.removeItem(name)
-    }
+    localStorage.removeItem(name)
   },
 }
 
@@ -101,40 +85,25 @@ export interface MatchState {
 }
 
 export interface GameStore {
-  // Navigation
   screen: Screen
   setScreen: (screen: Screen) => void
-  
-  // Player
   playerName: string
   playerAvatar: string
   setPlayerName: (name: string) => void
   setPlayerAvatar: (avatar: string) => void
-  
-  // Settings
   settings: GameSettings
   updateSettings: (settings: Partial<GameSettings>) => void
-  
-  // Statistics
   statistics: Statistics
   updateStatistics: (stats: Partial<Statistics>) => void
   resetStatistics: () => void
-  
-  // Achievements
   achievements: Achievement[]
   updateAchievementProgress: (id: string, progress: number) => void
   unlockAchievement: (id: string) => void
-  
-  // History
   history: HistoryEntry[]
   addHistoryEntry: (entry: HistoryEntry) => void
   clearHistory: () => void
-  
-  // Leaderboard
   leaderboard: LeaderboardEntry[]
   addLeaderboardEntry: (entry: LeaderboardEntry) => void
-  
-  // Match State
   matchState: MatchState | null
   initMatchState: (targetScore: number) => void
   addRoundScore: (playerScore: number, aiScore: number) => void
@@ -226,32 +195,23 @@ const defaultAchievements: Achievement[] = [
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
-      // Navigation
       screen: 'title',
       setScreen: (screen) => set({ screen }),
-      
-      // Player
       playerName: 'لاعب',
       playerAvatar: '/assets/avatar_player.png',
       setPlayerName: (playerName) => set({ playerName }),
       setPlayerAvatar: (playerAvatar) => set({ playerAvatar }),
-      
-      // Settings
       settings: defaultSettings,
       updateSettings: (newSettings) =>
         set((state) => ({
           settings: { ...state.settings, ...newSettings },
         })),
-      
-      // Statistics
       statistics: defaultStatistics,
       updateStatistics: (newStats) =>
         set((state) => ({
           statistics: { ...state.statistics, ...newStats },
         })),
       resetStatistics: () => set({ statistics: defaultStatistics }),
-      
-      // Achievements
       achievements: defaultAchievements,
       updateAchievementProgress: (id, progress) =>
         set((state) => ({
@@ -282,25 +242,19 @@ export const useGameStore = create<GameStore>()(
               : a
           ),
         })),
-      
-      // History
       history: [],
       addHistoryEntry: (entry) =>
         set((state) => ({
-          history: [entry, ...state.history].slice(0, 50), // Keep last 50
+          history: [entry, ...state.history].slice(0, 50),
         })),
       clearHistory: () => set({ history: [] }),
-      
-      // Leaderboard
       leaderboard: [],
       addLeaderboardEntry: (entry) =>
         set((state) => ({
           leaderboard: [...state.leaderboard, entry]
             .sort((a, b) => b.score - a.score)
-            .slice(0, 20), // Top 20
+            .slice(0, 20),
         })),
-      
-      // Match State
       matchState: null,
       initMatchState: (targetScore) =>
         set({
@@ -327,9 +281,8 @@ export const useGameStore = create<GameStore>()(
     }),
     {
       name: 'domino-game-storage',
-      storage: createJSONStorage(() => capacitorStorage),
+      storage: createJSONStorage(() => localStorageAdapter),
       partialize: (state) => ({
-        // Persist only these fields (not screen or matchState)
         playerName: state.playerName,
         playerAvatar: state.playerAvatar,
         settings: state.settings,
@@ -339,7 +292,6 @@ export const useGameStore = create<GameStore>()(
         leaderboard: state.leaderboard,
       }),
       onRehydrateStorage: () => (state) => {
-        // Ensure achievements array exists after rehydration
         if (state && !state.achievements) {
           state.achievements = defaultAchievements
         }
