@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useGameStore } from '@/store/gameStore'
 import { createInitialState, playTile, drawFromStock, getValidEnds, getAIMove, calculateScore, isGameBlocked, getBlockedWinner, canPlayerPlay, skipTurn } from '@/lib/gameEngine'
 import { getBestMove, getHintMessage, shouldDraw } from '@/lib/hintEngine'
-import { soundEngine } from '@/lib/soundEngine'
 import { GameState, DominoTile, TileEnd, TIMER_CONFIG, GAME_MODE_CONFIG } from '@/types/game'
 import { ArrowLeft, RotateCcw, Trophy, Lightbulb, Lock } from 'lucide-react'
 import TimerBar from '@/components/TimerBar'
@@ -32,16 +31,34 @@ export default function GameScreen() {
     return TIMER_CONFIG[settings.timerMode].time
   }, [settings.timerMode, settings.customTime])
 
-  useEffect(() => {
-    // Resume audio context on first interaction
-    soundEngine.resume()
+  // Get AI names based on count
+  const getAINames = useCallback((count: number): string[] => {
+    const names = ['الكمبيوتر', 'الكمبيوتر 2', 'الكمبيوتر 3', 'الكمبيوتر 4']
+    return names.slice(0, count)
+  }, [])
 
+  const getAIAvatars = useCallback((count: number): string[] => {
+    const avatars = [
+      '/assets/avatar_ai.png',
+      '/assets/avatar_ai.png',
+      '/assets/avatar_ai.png',
+      '/assets/avatar_ai.png'
+    ]
+    return avatars.slice(0, count)
+  }, [])
+
+  useEffect(() => {
     sessionStorage.setItem('gameStartTime', String(Date.now()))
 
-    const state = createInitialState(
-      [playerName, 'الكمبيوتر'],
-      [playerAvatar, '/assets/avatar_ai.png']
-    )
+    // Get AI count from settings or default to 1
+    const aiCount = settings.aiCount || 1
+    const aiNames = getAINames(aiCount)
+    const aiAvatars = getAIAvatars(aiCount)
+    
+    const allNames = [playerName, ...aiNames]
+    const allAvatars = [playerAvatar, ...aiAvatars]
+
+    const state = createInitialState(allNames, allAvatars)
     setGameState(state)
     moveCountRef.current = 0
     playerDrawCountRef.current = 0
@@ -50,7 +67,7 @@ export default function GameScreen() {
     setHintMessage('')
     setBestMove(null)
     setTimerKey(prev => prev + 1)
-  }, [playerName, playerAvatar])
+  }, [playerName, playerAvatar, settings.aiCount])
 
   useEffect(() => {
     if (!gameState || gameState.isGameOver || roundEnded) {
@@ -75,10 +92,13 @@ export default function GameScreen() {
     }
   }, [gameState, settings.showHints, roundEnded])
 
-  // AI Turn
+  // AI Turn - handles multiple AI players
   useEffect(() => {
     if (!gameState || gameState.isGameOver || roundEnded) return
-    if (gameState.currentPlayerIndex !== 1) return
+    if (gameState.currentPlayerIndex === 0) return // Player's turn
+
+    const currentPlayer = gameState.players[gameState.currentPlayerIndex]
+    if (!currentPlayer.isAI) return
 
     setAiThinking(true)
     const timer = setTimeout(() => {
@@ -90,10 +110,10 @@ export default function GameScreen() {
         return
       }
 
-      if (settings.gameMode === 'block' && !canPlayerPlay(gameState, 1)) {
+      if (settings.gameMode === 'block' && !canPlayerPlay(gameState, gameState.currentPlayerIndex)) {
         const newState = skipTurn(gameState)
         setGameState(newState)
-        setMessage('الكمبيوتر لا يستطيع اللعب - تخطي')
+        setMessage(`${currentPlayer.name} لا يستطيع اللعب - تخطي`)
         setAiThinking(false)
         setTimerKey(prev => prev + 1)
         return
@@ -102,13 +122,13 @@ export default function GameScreen() {
       const aiMove = getAIMove(gameState, settings.difficulty)
 
       if (aiMove) {
-        const result = playTile(gameState, 1, aiMove.tileIndex, aiMove.end)
+        const result = playTile(gameState, gameState.currentPlayerIndex, aiMove.tileIndex, aiMove.end)
         if (result.valid && result.newState) {
           moveCountRef.current += 1
 
-          if (settings.gameMode === 'allFives' && result.newState.players[1].score > (gameState.players[1]?.score || 0)) {
-            const gained = result.newState.players[1].score - (gameState.players[1]?.score || 0)
-            setMessage(`الكمبيوتر حصل على ${gained} نقطة!`)
+          if (settings.gameMode === 'allFives' && result.newState.players[gameState.currentPlayerIndex].score > (gameState.players[gameState.currentPlayerIndex]?.score || 0)) {
+            const gained = result.newState.players[gameState.currentPlayerIndex].score - (gameState.players[gameState.currentPlayerIndex]?.score || 0)
+            setMessage(`${currentPlayer.name} حصل على ${gained} نقطة!`)
           }
 
           setGameState(result.newState)
@@ -118,9 +138,9 @@ export default function GameScreen() {
         }
       } else {
         if (settings.gameMode === 'draw' && gameState.stock.length > 0) {
-          let newState = drawFromStock(gameState, 1)
-          while (!canPlayerPlay(newState, 1) && newState.stock.length > 0) {
-            newState = drawFromStock(newState, 1)
+          let newState = drawFromStock(gameState, gameState.currentPlayerIndex)
+          while (!canPlayerPlay(newState, gameState.currentPlayerIndex) && newState.stock.length > 0) {
+            newState = drawFromStock(newState, gameState.currentPlayerIndex)
           }
           setGameState(newState)
         } else {
@@ -136,8 +156,6 @@ export default function GameScreen() {
 
   const handleTimeUp = useCallback(() => {
     if (!gameState || gameState.currentPlayerIndex !== 0) return
-
-    soundEngine.playTimerWarning()
 
     if (gameState.stock.length > 0 && settings.gameMode !== 'block') {
       const newState = drawFromStock(gameState, 0)
@@ -174,12 +192,6 @@ export default function GameScreen() {
     sessionStorage.setItem('lastRoundPoints', String(pointsGained))
     sessionStorage.setItem('movesCount', String(moveCountRef.current))
 
-    if (isWin) {
-      soundEngine.playWin()
-    } else {
-      soundEngine.playLoss()
-    }
-
     if (settings.gameMode === 'points' && matchState) {
       addRoundScore(
         isWin ? opponentScore : 0,
@@ -210,9 +222,12 @@ export default function GameScreen() {
       } else {
         setRoundEnded(true)
         setTimeout(() => {
+          const aiCount = settings.aiCount || 1
+          const aiNames = getAINames(aiCount)
+          const aiAvatars = getAIAvatars(aiCount)
           const newState = createInitialState(
-            [playerName, 'الكمبيوتر'],
-            [playerAvatar, '/assets/avatar_ai.png']
+            [playerName, ...aiNames],
+            [playerAvatar, ...aiAvatars]
           )
           setGameState(newState)
           setRoundEnded(false)
@@ -258,7 +273,6 @@ export default function GameScreen() {
 
   const handleTileClick = (index: number) => {
     if (!gameState || gameState.currentPlayerIndex !== 0 || aiThinking || roundEnded) return
-    soundEngine.playClick()
     setSelectedTile(index === selectedTile ? null : index)
     setMessage('')
   }
@@ -268,7 +282,6 @@ export default function GameScreen() {
 
     const result = playTile(gameState, 0, selectedTile, end)
     if (result.valid && result.newState) {
-      soundEngine.playTilePlace()
       moveCountRef.current += 1
 
       if (settings.gameMode === 'allFives') {
@@ -287,7 +300,6 @@ export default function GameScreen() {
         handleRoundEnd(result.newState)
       }
     } else {
-      soundEngine.playInvalid()
       setMessage(result.message || 'لا يمكن اللعب هنا')
     }
   }
@@ -296,12 +308,10 @@ export default function GameScreen() {
     if (!gameState || gameState.currentPlayerIndex !== 0 || aiThinking || roundEnded) return
 
     if (settings.gameMode === 'block') {
-      soundEngine.playInvalid()
       setMessage('نمط الحظر: لا يمكن السحب!')
       return
     }
 
-    soundEngine.playDraw()
     const newState = drawFromStock(gameState, 0)
     setGameState(newState)
     setMessage('سحبت قطعة جديدة')
@@ -316,7 +326,6 @@ export default function GameScreen() {
     if (!gameState || gameState.currentPlayerIndex !== 0 || aiThinking || roundEnded) return
 
     if (settings.gameMode === 'block' && !canPlayerPlay(gameState, 0)) {
-      soundEngine.playClick()
       const newState = skipTurn(gameState)
       setGameState(newState)
       setMessage('تخطي الدور')
@@ -326,14 +335,16 @@ export default function GameScreen() {
   }
 
   const handleRestart = () => {
-    soundEngine.playClick()
     sessionStorage.setItem('gameStartTime', String(Date.now()))
     if (settings.gameMode === 'points') {
       initMatchState(settings.targetScore)
     }
+    const aiCount = settings.aiCount || 1
+    const aiNames = getAINames(aiCount)
+    const aiAvatars = getAIAvatars(aiCount)
     const state = createInitialState(
-      [playerName, 'الكمبيوتر'],
-      [playerAvatar, '/assets/avatar_ai.png']
+      [playerName, ...aiNames],
+      [playerAvatar, ...aiAvatars]
     )
     setGameState(state)
     setSelectedTile(null)
@@ -349,17 +360,19 @@ export default function GameScreen() {
   if (!gameState) return <div className="screen-container table-bg">Loading...</div>
 
   const player = gameState.players[0]
-  const ai = gameState.players[1]
   const isPlayerTurn = gameState.currentPlayerIndex === 0 && !gameState.isGameOver && !roundEnded
   const timeLimit = getTimeLimit()
   const modeConfig = GAME_MODE_CONFIG[settings.gameMode]
   const canSkip = settings.gameMode === 'block' && !canPlayerPlay(gameState, 0)
 
+  // Get current AI player info
+  const currentAI = gameState.currentPlayerIndex !== 0 ? gameState.players[gameState.currentPlayerIndex] : null
+
   return (
     <div className="screen-container table-bg safe-area-top safe-area-bottom">
       {/* Header */}
       <div className="flex justify-between items-center w-full px-4 py-2">
-        <button onClick={() => { soundEngine.playClick(); setScreen('menu'); }} className="text-white p-2">
+        <button onClick={() => setScreen('menu')} className="text-white p-2">
           <ArrowLeft size={24} />
         </button>
         <div className="text-white font-bold flex items-center gap-2">
@@ -371,7 +384,7 @@ export default function GameScreen() {
           ) : settings.gameMode === 'allFives' ? (
             <>
               <span className="text-yellow-400">5️⃣</span>
-              <span>{player.score} - {ai.score}</span>
+              <span>{player.score} - {gameState.players[1]?.score || 0}</span>
             </>
           ) : (
             <>
@@ -418,7 +431,7 @@ export default function GameScreen() {
       {roundEnded && (
         <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-40">
           <div className="bg-gray-900 rounded-xl p-6 text-center max-w-xs">
-            <div className="text-3xl mb-2">🎯</div>
+            <div className="text-3xl mb-2">🏆</div>
             <h3 className="text-white text-xl font-bold mb-2">نهاية الجولة!</h3>
             {matchState && (
               <div className="text-white/80 text-sm">
@@ -432,32 +445,61 @@ export default function GameScreen() {
         </div>
       )}
 
-      {/* AI Player */}
-      <div className={`flex items-center gap-3 px-4 py-2 rounded-xl ${gameState.currentPlayerIndex === 1 ? 'bg-yellow-500/20' : ''}`}>
-        <img src={ai.avatar} alt="AI" className="avatar-img" />
-        <div className="text-white">
-          <div className="font-bold">{ai.name}</div>
-          <div className="text-sm opacity-70">{ai.hand.length} قطع</div>
-          {settings.gameMode === 'allFives' && (
-            <div className="text-yellow-400 text-sm">{ai.score} نقطة</div>
-          )}
-        </div>
-        {aiThinking && <div className="text-yellow-400 text-sm animate-pulse">يفكر...</div>}
+      {/* AI Players Info */}
+      <div className="w-full px-4">
+        {gameState.players.map((p, i) => {
+          if (i === 0) return null // Skip player
+          return (
+            <div key={p.id} className={`flex items-center gap-3 px-4 py-2 rounded-xl mb-1 ${gameState.currentPlayerIndex === i ? 'bg-yellow-500/20' : ''}`}>
+              <img src={p.avatar} alt={p.name} className="avatar-img" style={{ width: '48px', height: '48px' }} />
+              <div className="text-white">
+                <div className="font-bold">{p.name}</div>
+                <div className="text-sm opacity-70">{p.hand.length} قطع</div>
+                {settings.gameMode === 'allFives' && (
+                  <div className="text-yellow-400 text-sm">{p.score} نقطة</div>
+                )}
+              </div>
+              {gameState.currentPlayerIndex === i && aiThinking && (
+                <div className="text-yellow-400 text-sm animate-pulse">يفكر...</div>
+              )}
+            </div>
+          )
+        })}
       </div>
 
-      {/* Board */}
-      <div className="flex-1 flex items-center justify-center w-full overflow-hidden px-4">
+      {/* Board - Snake Layout */}
+      <div className="game-board">
         {gameState.board.length === 0 ? (
           <div className="text-white/50 text-lg">ابدأ اللعب بأي قطعة</div>
         ) : (
-          <div className="flex items-center gap-1 overflow-x-auto py-4 w-full justify-center">
-            {gameState.board.map((tile, i) => (
-              <div key={tile.id} className={`domino-tile ${i === 0 ? 'border-l-4 border-yellow-400' : ''} ${i === gameState.board.length - 1 ? 'border-r-4 border-yellow-400' : ''}`}>
-                <div className="domino-half">{renderDots(tile.top)}</div>
-                <div className="domino-divider" />
-                <div className="domino-half">{renderDots(tile.bottom)}</div>
-              </div>
-            ))}
+          <div className="snake-board">
+            {(() => {
+              // Create snake layout rows
+              const rows: DominoTile[][] = []
+              let currentRow: DominoTile[] = []
+              const maxPerRow = 6 // Adjust based on screen width
+              
+              gameState.board.forEach((tile, i) => {
+                currentRow.push(tile)
+                if (currentRow.length >= maxPerRow) {
+                  rows.push([...currentRow])
+                  currentRow = []
+                }
+              })
+              if (currentRow.length > 0) rows.push(currentRow)
+              
+              return rows.map((row, rowIndex) => (
+                <div key={rowIndex} className="snake-row">
+                  {row.map((tile) => (
+                    <div key={tile.id} className="domino-tile">
+                      <div className="half"><Dots count={tile.top} /></div>
+                      <div className="divider" />
+                      <div className="half"><Dots count={tile.bottom} /></div>
+                    </div>
+                  ))}
+                </div>
+              ))
+            })()}
           </div>
         )}
       </div>
@@ -481,7 +523,7 @@ export default function GameScreen() {
 
       {/* Player Hand */}
       <div className="w-full px-4 pb-2">
-        <div className="flex gap-2 overflow-x-auto py-2">
+        <div className="player-hand w-full justify-center">
           {player.hand.map((tile, index) => {
             const validEnds = getValidEnds(tile, gameState.board)
             const isSelected = selectedTile === index
@@ -493,20 +535,18 @@ export default function GameScreen() {
               <button
                 key={tile.id}
                 onClick={() => handleTileClick(index)}
-                className={`domino-tile flex-shrink-0 transition-transform relative ${
-                  isSelected ? 'scale-110 ring-2 ring-yellow-400' : ''
-                } ${isBestMove ? 'ring-2 ring-green-400' : ''} ${canPlay ? '' : 'opacity-50'}`}
+                className={`domino-tile ${isSelected ? 'selected' : ''} ${isBestMove ? 'ring-2 ring-green-400' : ''} ${canPlay ? '' : 'opacity-50'}`}
                 disabled={!isPlayerTurn}
               >
                 {isBestMove && (
                   <div className="absolute -top-2 -right-2 bg-green-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold z-10">
-                    ★
+                    ⭐
                   </div>
                 )}
 
-                <div className="domino-half">{renderDots(tile.top)}</div>
-                <div className="domino-divider" />
-                <div className="domino-half">{renderDots(tile.bottom)}</div>
+                <div className="half"><Dots count={tile.top} /></div>
+                <div className="divider" />
+                <div className="half"><Dots count={tile.bottom} /></div>
 
                 {isSelected && validEnds.length > 0 && (
                   <div className="absolute -top-8 left-1/2 -translate-x-1/2 flex gap-1">
@@ -520,8 +560,8 @@ export default function GameScreen() {
                             : 'bg-yellow-500 text-black'
                         }`}
                       >
-                        {end === 'left' ? '←' : '→'}
-                        {bestMove?.tileIndex === index && bestMove?.end === end && ' ★'}
+                        {end === 'left' ? '← يسار' : 'يمين →'}
+                        {bestMove?.tileIndex === index && bestMove?.end === end && ' ⭐'}
                       </button>
                     ))}
                   </div>
@@ -562,23 +602,31 @@ export default function GameScreen() {
   )
 }
 
-function renderDots(count: number): JSX.Element {
+function Dots({ count }: { count: number }) {
   const positions: Record<number, string[]> = {
     0: [],
-    1: ['center'],
-    2: ['top-left', 'bottom-right'],
-    3: ['top-left', 'center', 'bottom-right'],
-    4: ['top-left', 'top-right', 'bottom-left', 'bottom-right'],
-    5: ['top-left', 'top-right', 'center', 'bottom-left', 'bottom-right'],
-    6: ['top-left', 'top-right', 'middle-left', 'middle-right', 'bottom-left', 'bottom-right'],
+    1: ['c'],
+    2: ['tl', 'br'],
+    3: ['tl', 'c', 'br'],
+    4: ['tl', 'tr', 'bl', 'br'],
+    5: ['tl', 'tr', 'c', 'bl', 'br'],
+    6: ['tl', 'tr', 'ml', 'mr', 'bl', 'br'],
   }
 
-  const dots = positions[count] || []
+  const map: Record<string, React.CSSProperties> = {
+    'tl': { top: '6px', left: '6px' },
+    'tr': { top: '6px', right: '6px' },
+    'ml': { top: '50%', left: '6px', transform: 'translateY(-50%)' },
+    'mr': { top: '50%', right: '6px', transform: 'translateY(-50%)' },
+    'c': { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' },
+    'bl': { bottom: '6px', left: '6px' },
+    'br': { bottom: '6px', right: '6px' },
+  }
 
   return (
-    <div className="dot-grid">
-      {dots.map((pos) => (
-        <div key={pos} className={`dot dot-${pos}`} />
+    <div className="relative w-full h-full">
+      {(positions[count] || []).map((p, i) => (
+        <div key={i} className="dot" style={map[p]} />
       ))}
     </div>
   )
