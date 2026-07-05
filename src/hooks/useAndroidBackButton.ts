@@ -1,11 +1,9 @@
-import { App } from '@capacitor/app'
 import { useEffect, useCallback, useState } from 'react'
 import { useGameStore } from '@/store/gameStore'
 
 /**
  * Android Back Button Handler
- * Prevents app from closing when pressing back button
- * Instead, navigates back to previous screen or shows exit confirmation
+ * Uses standard browser events + Capacitor App plugin if available
  */
 
 export function useAndroidBackButton() {
@@ -16,7 +14,7 @@ export function useAndroidBackButton() {
   const screenHierarchy: Record<string, string> = {
     'menu': 'title',
     'levelSelect': 'menu',
-    'game': 'menu',  // Will show exit confirmation instead
+    'game': 'menu',
     'matchEnd': 'menu',
     'settings': 'menu',
     'statistics': 'menu',
@@ -32,50 +30,67 @@ export function useAndroidBackButton() {
     // If in game, show exit confirmation instead of going back
     if (screen === 'game') {
       setShowExitConfirm(true)
-      return true // Handled
+      return true
     }
 
     // If showing exit confirmation, close it
     if (showExitConfirm) {
       setShowExitConfirm(false)
-      return true // Handled
+      return true
     }
 
     // Navigate to previous screen
     const previousScreen = screenHierarchy[screen]
     if (previousScreen) {
       setScreen(previousScreen as any)
-      return true // Handled
+      return true
     }
 
     // If at title screen, let the default behavior (exit app)
     if (screen === 'title') {
-      return false // Not handled, will exit app
+      return false
     }
 
     return false
   }, [screen, showExitConfirm, setScreen])
 
   useEffect(() => {
-    // Register back button listener
-    const listener = App.addListener('backButton', ({ canGoBack }) => {
-      const handled = handleBackButton()
+    // Try to use Capacitor App plugin if available
+    const setupBackButton = async () => {
+      try {
+        // Dynamic import to avoid build errors if not installed
+        const { App } = await import('@capacitor/app')
 
-      if (!handled) {
-        // If not handled, check if we can go back in browser history
-        if (canGoBack) {
-          window.history.back()
-        } else {
-          // Show exit confirmation for title screen
-          if (screen === 'title') {
-            setShowExitConfirm(true)
+        const listener = await App.addListener('backButton', ({ canGoBack }) => {
+          const handled = handleBackButton()
+
+          if (!handled) {
+            if (canGoBack) {
+              window.history.back()
+            } else if (screen === 'title') {
+              setShowExitConfirm(true)
+            }
           }
+        })
+
+        return () => {
+          listener.remove()
         }
+      } catch (e) {
+        // Fallback: use browser popstate for web
+        const handlePopState = () => {
+          handleBackButton()
+        }
+
+        window.addEventListener('popstate', handlePopState)
+        return () => window.removeEventListener('popstate', handlePopState)
       }
-    })
+    }
+
+    const cleanup = setupBackButton()
 
     return () => {
-      listener.then(l => l.remove())
+      cleanup.then(fn => fn?.())
     }
   }, [handleBackButton, screen])
 
