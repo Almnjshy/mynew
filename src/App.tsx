@@ -14,8 +14,6 @@ import ProfileScreen from './screens/ProfileScreen'
 import LeaderboardScreen from './screens/LeaderboardScreen'
 import WifiGameScreen from './screens/WifiGameScreen'
 import OnlineGameScreen from './screens/OnlineGameScreen'
-import AchievementToast from './components/AchievementToast'
-import MusicPlayer from './components/MusicPlayer'
 
 function App() {
   const { screen } = useGameStore()
@@ -42,8 +40,6 @@ function App() {
 
   return (
     <div className="app-container">
-      <MusicPlayer />
-      <AchievementToast />
       {screen === 'title' && <TitleScreen />}
       {screen === 'menu' && <MainMenu />}
       {screen === 'levelSelect' && <LevelSelect />}
