@@ -58,8 +58,8 @@ export default function MainMenu() {
           <Wifi size={24} /> لعب مع الأصدقاء (WiFi)
         </button>
 
-        <button onClick={() => handleNavigate('onlineGame')} className="game-btn game-btn-secondary w-full gap-3">
-          <Globe size={24} /> لعب أونلاين
+        <button onClick={() => handleNavigate('onlineGame')} className="game-btn game-btn-secondary w-full gap-3 opacity-50">
+          <Globe size={24} /> لعب أونلاين (قريباً)
         </button>
 
         <button onClick={() => handleNavigate('statistics')} className="game-btn game-btn-secondary w-full gap-3">
