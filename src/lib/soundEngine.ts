@@ -1,347 +1,228 @@
+import { Preferences } from '@capacitor/preferences'
+
 /**
- * Sound Engine using Web Audio API
- * Generates sounds programmatically - no external files needed
+ * Sound Engine using HTML5 Audio with MP3 files
+ * All sounds loaded from /assets/sounds/ directory
  */
 
 class SoundEngine {
-  private audioContext: AudioContext | null = null
-  private musicOscillator: OscillatorNode | null = null
-  private musicGain: GainNode | null = null
-  private isMusicPlaying = false
+  private sounds: Map<string, HTMLAudioElement> = new Map()
+  private bgm: HTMLAudioElement | null = null
   private soundEnabled = true
   private musicEnabled = true
-  private musicInterval: number | null = null
+  private currentBgm: string | null = null
 
-  private getContext(): AudioContext {
-    if (!this.audioContext) {
-      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+  // Sound file paths
+  private readonly SOUND_PATHS: Record<string, string> = {
+    tilePlace: '/assets/sounds/tile_place.mp3',
+    draw: '/assets/sounds/tile_draw.mp3',
+    win: '/assets/sounds/win.mp3',
+    lose: '/assets/sounds/lose.mp3',
+    click: '/assets/sounds/click.mp3',
+    invalid: '/assets/sounds/invalid.mp3',
+    matchStart: '/assets/sounds/match_start.mp3',
+    timerWarning: '/assets/sounds/timer_warning.mp3',
+    achievement: '/assets/sounds/achievement.mp3',
+    score: '/assets/sounds/score.mp3',
+    bgmMenu: '/assets/sounds/bgm_menu.mp3',
+    bgmGame: '/assets/sounds/bgm_game.mp3',
+  }
+
+  constructor() {
+    this.loadSettings()
+  }
+
+  private async loadSettings() {
+    try {
+      const { value } = await Preferences.get({ key: 'domino_settings' })
+      if (value) {
+        const settings = JSON.parse(value)
+        this.soundEnabled = settings.soundEnabled ?? true
+        this.musicEnabled = settings.musicEnabled ?? true
+      }
+    } catch {
+      // Use defaults
     }
-    return this.audioContext
+  }
+
+  private getAudio(path: string): HTMLAudioElement {
+    if (!this.sounds.has(path)) {
+      const audio = new Audio(path)
+      audio.preload = 'auto'
+      this.sounds.set(path, audio)
+    }
+    return this.sounds.get(path)!
   }
 
   /**
-   * Play a tile placement sound (wooden click)
+   * Play a sound effect (one-shot)
+   */
+  private playSound(soundName: string, volume = 1.0) {
+    if (!this.soundEnabled) return
+    try {
+      const path = this.SOUND_PATHS[soundName]
+      if (!path) return
+
+      const audio = this.getAudio(path)
+      audio.currentTime = 0
+      audio.volume = volume
+      audio.play().catch(() => {
+        // Audio play failed (browser policy)
+      })
+    } catch (e) {
+      console.error('Sound error:', e)
+    }
+  }
+
+  /**
+   * Play tile placement sound (wooden click)
    */
   playTilePlace() {
-    if (!this.soundEnabled) return
-    try {
-      const ctx = this.getContext()
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-
-      osc.type = 'sine'
-      osc.frequency.setValueAtTime(800, ctx.currentTime)
-      osc.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.1)
-
-      gain.gain.setValueAtTime(0.3, ctx.currentTime)
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15)
-
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-
-      osc.start(ctx.currentTime)
-      osc.stop(ctx.currentTime + 0.15)
-    } catch (e) {
-      console.error('Sound error:', e)
-    }
+    this.playSound('tilePlace', 0.6)
   }
 
   /**
-   * Play a draw sound (shuffling cards)
+   * Play draw sound (shuffling)
    */
   playDraw() {
-    if (!this.soundEnabled) return
-    try {
-      const ctx = this.getContext()
-      const bufferSize = ctx.sampleRate * 0.2
-      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
-      const data = buffer.getChannelData(0)
-
-      for (let i = 0; i < bufferSize; i++) {
-        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.3))
-      }
-
-      const source = ctx.createBufferSource()
-      source.buffer = buffer
-
-      const filter = ctx.createBiquadFilter()
-      filter.type = 'lowpass'
-      filter.frequency.value = 2000
-
-      const gain = ctx.createGain()
-      gain.gain.value = 0.2
-
-      source.connect(filter)
-      filter.connect(gain)
-      gain.connect(ctx.destination)
-
-      source.start()
-    } catch (e) {
-      console.error('Sound error:', e)
-    }
+    this.playSound('draw', 0.5)
   }
 
   /**
    * Play win sound (victory chime)
    */
   playWin() {
-    if (!this.soundEnabled) return
-    try {
-      const ctx = this.getContext()
-      const notes = [523.25, 659.25, 783.99, 1046.50] // C5, E5, G5, C6
-
-      notes.forEach((freq, i) => {
-        const osc = ctx.createOscillator()
-        const gain = ctx.createGain()
-
-        osc.type = 'sine'
-        osc.frequency.value = freq
-
-        gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.15)
-        gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + i * 0.15 + 0.05)
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.15 + 0.3)
-
-        osc.connect(gain)
-        gain.connect(ctx.destination)
-
-        osc.start(ctx.currentTime + i * 0.15)
-        osc.stop(ctx.currentTime + i * 0.15 + 0.3)
-      })
-    } catch (e) {
-      console.error('Sound error:', e)
-    }
+    this.playSound('win', 0.8)
   }
 
   /**
-   * Play loss sound (sad tone)
+   * Play lose sound
    */
-  playLoss() {
-    if (!this.soundEnabled) return
-    try {
-      const ctx = this.getContext()
-      const notes = [400, 350, 300, 250]
-
-      notes.forEach((freq, i) => {
-        const osc = ctx.createOscillator()
-        const gain = ctx.createGain()
-
-        osc.type = 'sawtooth'
-        osc.frequency.value = freq
-
-        gain.gain.setValueAtTime(0.2, ctx.currentTime + i * 0.2)
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.2 + 0.3)
-
-        osc.connect(gain)
-        gain.connect(ctx.destination)
-
-        osc.start(ctx.currentTime + i * 0.2)
-        osc.stop(ctx.currentTime + i * 0.2 + 0.3)
-      })
-    } catch (e) {
-      console.error('Sound error:', e)
-    }
+  playLose() {
+    this.playSound('lose', 0.7)
   }
 
   /**
-   * Play invalid move sound (buzzer)
+   * Play UI click sound
+   */
+  playClick() {
+    this.playSound('click', 0.4)
+  }
+
+  /**
+   * Play invalid move sound
    */
   playInvalid() {
-    if (!this.soundEnabled) return
-    try {
-      const ctx = this.getContext()
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-
-      osc.type = 'square'
-      osc.frequency.value = 150
-
-      gain.gain.setValueAtTime(0.2, ctx.currentTime)
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
-
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-
-      osc.start(ctx.currentTime)
-      osc.stop(ctx.currentTime + 0.2)
-    } catch (e) {
-      console.error('Sound error:', e)
-    }
+    this.playSound('invalid', 0.5)
   }
 
   /**
-   * Play achievement unlock sound
+   * Play match start sound
    */
-  playAchievement() {
-    if (!this.soundEnabled) return
-    try {
-      const ctx = this.getContext()
-      const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51]
-
-      notes.forEach((freq, i) => {
-        const osc = ctx.createOscillator()
-        const gain = ctx.createGain()
-
-        osc.type = 'triangle'
-        osc.frequency.value = freq
-
-        gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.1)
-        gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + i * 0.1 + 0.02)
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.1 + 0.2)
-
-        osc.connect(gain)
-        gain.connect(ctx.destination)
-
-        osc.start(ctx.currentTime + i * 0.1)
-        osc.stop(ctx.currentTime + i * 0.1 + 0.2)
-      })
-    } catch (e) {
-      console.error('Sound error:', e)
-    }
+  playMatchStart() {
+    this.playSound('matchStart', 0.7)
   }
 
   /**
    * Play timer warning sound
    */
   playTimerWarning() {
-    if (!this.soundEnabled) return
-    try {
-      const ctx = this.getContext()
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-
-      osc.type = 'sine'
-      osc.frequency.value = 800
-
-      gain.gain.setValueAtTime(0.2, ctx.currentTime)
-      gain.gain.setValueAtTime(0, ctx.currentTime + 0.1)
-      gain.gain.setValueAtTime(0.2, ctx.currentTime + 0.2)
-      gain.gain.setValueAtTime(0, ctx.currentTime + 0.3)
-
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-
-      osc.start(ctx.currentTime)
-      osc.stop(ctx.currentTime + 0.3)
-    } catch (e) {
-      console.error('Sound error:', e)
-    }
+    this.playSound('timerWarning', 0.6)
   }
 
   /**
-   * Play button click sound
+   * Play achievement unlocked sound
    */
-  playClick() {
-    if (!this.soundEnabled) return
-    try {
-      const ctx = this.getContext()
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-
-      osc.type = 'sine'
-      osc.frequency.value = 1200
-
-      gain.gain.setValueAtTime(0.1, ctx.currentTime)
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05)
-
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-
-      osc.start(ctx.currentTime)
-      osc.stop(ctx.currentTime + 0.05)
-    } catch (e) {
-      console.error('Sound error:', e)
-    }
+  playAchievement() {
+    this.playSound('achievement', 0.8)
   }
 
   /**
-   * Start background music (ambient)
+   * Play score sound
    */
-  startMusic() {
-    if (!this.musicEnabled || this.isMusicPlaying) return
-    try {
-      const ctx = this.getContext()
+  playScore() {
+    this.playSound('score', 0.5)
+  }
 
-      // Create a simple ambient drone
-      const osc1 = ctx.createOscillator()
-      const osc2 = ctx.createOscillator()
-      const gain = ctx.createGain()
+  /**
+   * Start background music (loop)
+   */
+  startMusic(musicName: 'menu' | 'game') {
+    if (!this.musicEnabled) return
 
-      osc1.type = 'sine'
-      osc1.frequency.value = 220 // A3
+    const path = musicName === 'menu' ? this.SOUND_PATHS.bgmMenu : this.SOUND_PATHS.bgmGame
+    if (!path) return
 
-      osc2.type = 'triangle'
-      osc2.frequency.value = 330 // E4
+    // Stop current music
+    this.stopMusic()
 
-      gain.gain.value = 0.05 // Very quiet
-
-      osc1.connect(gain)
-      osc2.connect(gain)
-      gain.connect(ctx.destination)
-
-      osc1.start()
-      osc2.start()
-
-      this.musicOscillator = osc1
-      this.musicGain = gain
-      this.isMusicPlaying = true
-
-      // Add subtle variation
-      let step = 0
-      this.musicInterval = window.setInterval(() => {
-        if (!this.musicEnabled) return
-        step++
-        const baseFreq = 220 + Math.sin(step * 0.1) * 10
-        osc1.frequency.setValueAtTime(baseFreq, ctx.currentTime)
-        osc2.frequency.setValueAtTime(baseFreq * 1.5, ctx.currentTime)
-      }, 100)
-    } catch (e) {
-      console.error('Music error:', e)
-    }
+    this.currentBgm = path
+    this.bgm = new Audio(path)
+    this.bgm.loop = true
+    this.bgm.volume = 0.3
+    this.bgm.play().catch(() => {
+      // Audio play failed
+    })
   }
 
   /**
    * Stop background music
    */
   stopMusic() {
-    if (this.musicOscillator) {
-      try {
-        this.musicOscillator.stop()
-      } catch (e) {}
-      this.musicOscillator = null
+    if (this.bgm) {
+      this.bgm.pause()
+      this.bgm.currentTime = 0
+      this.bgm = null
     }
-    if (this.musicInterval) {
-      clearInterval(this.musicInterval)
-      this.musicInterval = null
-    }
-    this.isMusicPlaying = false
+    this.currentBgm = null
   }
 
   /**
-   * Set sound enabled state
+   * Pause background music
+   */
+  pauseMusic() {
+    if (this.bgm) {
+      this.bgm.pause()
+    }
+  }
+
+  /**
+   * Resume background music
+   */
+  resumeMusic() {
+    if (this.bgm && this.musicEnabled) {
+      this.bgm.play().catch(() => {})
+    }
+  }
+
+  /**
+   * Set sound enabled/disabled
    */
   setSoundEnabled(enabled: boolean) {
     this.soundEnabled = enabled
   }
 
   /**
-   * Set music enabled state
+   * Set music enabled/disabled
    */
   setMusicEnabled(enabled: boolean) {
     this.musicEnabled = enabled
-    if (enabled) {
-      this.startMusic()
-    } else {
+    if (!enabled) {
       this.stopMusic()
+    } else if (this.currentBgm) {
+      this.resumeMusic()
     }
   }
 
   /**
-   * Resume audio context (needed for browsers that suspend it)
+   * Preload all sounds (call on app start)
    */
-  resume() {
-    if (this.audioContext && this.audioContext.state === 'suspended') {
-      this.audioContext.resume()
-    }
+  preloadSounds() {
+    Object.values(this.SOUND_PATHS).forEach((path) => {
+      const audio = new Audio(path)
+      audio.preload = 'auto'
+      this.sounds.set(path, audio)
+    })
   }
 }
 
