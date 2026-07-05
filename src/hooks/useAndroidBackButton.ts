@@ -3,14 +3,13 @@ import { useGameStore } from '@/store/gameStore'
 
 /**
  * Android Back Button Handler
- * Uses standard browser events + Capacitor App plugin if available
+ * Uses browser popstate for web, Capacitor App plugin if available
  */
 
 export function useAndroidBackButton() {
   const { screen, setScreen } = useGameStore()
   const [showExitConfirm, setShowExitConfirm] = useState(false)
 
-  // Define screen hierarchy for back navigation
   const screenHierarchy: Record<string, string> = {
     'menu': 'title',
     'levelSelect': 'menu',
@@ -27,26 +26,22 @@ export function useAndroidBackButton() {
   }
 
   const handleBackButton = useCallback(() => {
-    // If in game, show exit confirmation instead of going back
     if (screen === 'game') {
       setShowExitConfirm(true)
       return true
     }
 
-    // If showing exit confirmation, close it
     if (showExitConfirm) {
       setShowExitConfirm(false)
       return true
     }
 
-    // Navigate to previous screen
     const previousScreen = screenHierarchy[screen]
     if (previousScreen) {
       setScreen(previousScreen as any)
       return true
     }
 
-    // If at title screen, let the default behavior (exit app)
     if (screen === 'title') {
       return false
     }
@@ -55,44 +50,39 @@ export function useAndroidBackButton() {
   }, [screen, showExitConfirm, setScreen])
 
   useEffect(() => {
-    // Try to use Capacitor App plugin if available
-    const setupBackButton = async () => {
+    // Use browser popstate for back button
+    const handlePopState = () => {
+      handleBackButton()
+    }
+    
+    window.addEventListener('popstate', handlePopState)
+    
+    // Also handle hardware back button on Android via Capacitor if available
+    let cleanup: (() => void) | undefined
+    
+    const setupCapacitor = async () => {
       try {
-        // Dynamic import to avoid build errors if not installed
+        // @ts-ignore - ignore if not installed
         const { App } = await import('@capacitor/app')
-
         const listener = await App.addListener('backButton', ({ canGoBack }) => {
           const handled = handleBackButton()
-
-          if (!handled) {
-            if (canGoBack) {
-              window.history.back()
-            } else if (screen === 'title') {
-              setShowExitConfirm(true)
-            }
+          if (!handled && canGoBack) {
+            window.history.back()
           }
         })
-
-        return () => {
-          listener.remove()
-        }
+        cleanup = () => listener.remove()
       } catch (e) {
-        // Fallback: use browser popstate for web
-        const handlePopState = () => {
-          handleBackButton()
-        }
-
-        window.addEventListener('popstate', handlePopState)
-        return () => window.removeEventListener('popstate', handlePopState)
+        // Capacitor not available, browser fallback is enough
       }
     }
-
-    const cleanup = setupBackButton()
+    
+    setupCapacitor()
 
     return () => {
-      cleanup.then(fn => fn?.())
+      window.removeEventListener('popstate', handlePopState)
+      cleanup?.()
     }
-  }, [handleBackButton, screen])
+  }, [handleBackButton])
 
   return {
     showExitConfirm,
@@ -100,9 +90,6 @@ export function useAndroidBackButton() {
   }
 }
 
-/**
- * Hook for exit confirmation in game screen
- */
 export function useGameExitHandler() {
   const { setScreen } = useGameStore()
   const [showExitConfirm, setShowExitConfirm] = useState(false)
