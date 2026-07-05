@@ -3,7 +3,7 @@ import { useGameStore } from '@/store/gameStore'
 
 /**
  * Android Back Button Handler
- * Uses browser popstate for web, Capacitor App plugin if available
+ * Uses browser events only - no external dependencies
  */
 
 export function useAndroidBackButton() {
@@ -57,30 +57,8 @@ export function useAndroidBackButton() {
     
     window.addEventListener('popstate', handlePopState)
     
-    // Also handle hardware back button on Android via Capacitor if available
-    let cleanup: (() => void) | undefined
-    
-    const setupCapacitor = async () => {
-      try {
-        // @ts-ignore - ignore if not installed
-        const { App } = await import('@capacitor/app')
-        const listener = await App.addListener('backButton', ({ canGoBack }) => {
-          const handled = handleBackButton()
-          if (!handled && canGoBack) {
-            window.history.back()
-          }
-        })
-        cleanup = () => listener.remove()
-      } catch (e) {
-        // Capacitor not available, browser fallback is enough
-      }
-    }
-    
-    setupCapacitor()
-
     return () => {
       window.removeEventListener('popstate', handlePopState)
-      cleanup?.()
     }
   }, [handleBackButton])
 
