@@ -1,6 +1,9 @@
 import { useEffect } from 'react'
 import './App.css'
 import { useGameStore } from './store/gameStore'
+import { useAndroidBackButton } from './hooks/useAndroidBackButton'
+import ErrorBoundary from './components/ErrorBoundary'
+import ScreenTransition from './components/ScreenTransition'
 import TitleScreen from './screens/TitleScreen'
 import MainMenu from './screens/MainMenu'
 import LevelSelect from './screens/LevelSelect'
@@ -17,6 +20,9 @@ import OnlineGameScreen from './screens/OnlineGameScreen'
 
 function App() {
   const { screen } = useGameStore()
+
+  // Initialize Android back button handler
+  useAndroidBackButton()
 
   useEffect(() => {
     const preventZoom = (e: TouchEvent) => {
@@ -38,22 +44,34 @@ function App() {
     }
   }, [])
 
+  // Render screen with transition
+  const renderScreen = () => {
+    switch (screen) {
+      case 'title': return <TitleScreen />
+      case 'menu': return <MainMenu />
+      case 'levelSelect': return <LevelSelect />
+      case 'game': return <GameScreen />
+      case 'matchEnd': return <MatchEndScreen />
+      case 'settings': return <SettingsScreen />
+      case 'statistics': return <StatisticsScreen />
+      case 'achievements': return <AchievementsScreen />
+      case 'history': return <HistoryScreen />
+      case 'profile': return <ProfileScreen />
+      case 'leaderboard': return <LeaderboardScreen />
+      case 'wifiGame': return <WifiGameScreen />
+      case 'onlineGame': return <OnlineGameScreen />
+      default: return <TitleScreen />
+    }
+  }
+
   return (
-    <div className="app-container">
-      {screen === 'title' && <TitleScreen />}
-      {screen === 'menu' && <MainMenu />}
-      {screen === 'levelSelect' && <LevelSelect />}
-      {screen === 'game' && <GameScreen />}
-      {screen === 'matchEnd' && <MatchEndScreen />}
-      {screen === 'settings' && <SettingsScreen />}
-      {screen === 'statistics' && <StatisticsScreen />}
-      {screen === 'achievements' && <AchievementsScreen />}
-      {screen === 'history' && <HistoryScreen />}
-      {screen === 'profile' && <ProfileScreen />}
-      {screen === 'leaderboard' && <LeaderboardScreen />}
-      {screen === 'wifiGame' && <WifiGameScreen />}
-      {screen === 'onlineGame' && <OnlineGameScreen />}
-    </div>
+    <ErrorBoundary>
+      <div className="app-container">
+        <ScreenTransition isVisible={true}>
+          {renderScreen()}
+        </ScreenTransition>
+      </div>
+    </ErrorBoundary>
   )
 }
 
