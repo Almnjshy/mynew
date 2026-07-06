@@ -1,9 +1,11 @@
 import { useEffect, useCallback, useState } from 'react'
+import { App } from '@capacitor/app'
 import { useGameStore } from '@/store/gameStore'
 
 /**
  * Android Back Button Handler
- * Uses browser events only - no external dependencies
+ * Uses Capacitor App plugin for native back button
+ * Falls back to browser events for web
  */
 
 export function useAndroidBackButton() {
@@ -28,7 +30,7 @@ export function useAndroidBackButton() {
   const handleBackButton = useCallback(() => {
     if (screen === 'game') {
       setShowExitConfirm(true)
-      return true
+      return true // Prevent default back
     }
 
     if (showExitConfirm) {
@@ -39,10 +41,11 @@ export function useAndroidBackButton() {
     const previousScreen = screenHierarchy[screen]
     if (previousScreen) {
       setScreen(previousScreen as any)
-      return true
+      return true // Prevent default back
     }
 
     if (screen === 'title') {
+      // Allow app to close on title screen
       return false
     }
 
@@ -50,16 +53,31 @@ export function useAndroidBackButton() {
   }, [screen, showExitConfirm, setScreen])
 
   useEffect(() => {
-    // Use browser popstate for back button
-    const handlePopState = () => {
-      handleBackButton()
+    let cleanup: (() => void) | undefined
+
+    // Try Capacitor App plugin first
+    try {
+      const listener = App.addListener('backButton', ({ canGoBack }) => {
+        const handled = handleBackButton()
+        if (!handled && !canGoBack) {
+          App.exitApp()
+        }
+      })
+      cleanup = () => {
+        listener.then(l => l.remove())
+      }
+    } catch {
+      // Fallback to browser events for web
+      const handlePopState = () => {
+        handleBackButton()
+      }
+      window.addEventListener('popstate', handlePopState)
+      cleanup = () => {
+        window.removeEventListener('popstate', handlePopState)
+      }
     }
-    
-    window.addEventListener('popstate', handlePopState)
-    
-    return () => {
-      window.removeEventListener('popstate', handlePopState)
-    }
+
+    return cleanup
   }, [handleBackButton])
 
   return {
