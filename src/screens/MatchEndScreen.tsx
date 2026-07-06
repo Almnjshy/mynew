@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useGameStore } from '@/store/gameStore'
-import { Trophy, RotateCcw, Home, Star, Award } from 'lucide-react'
+import { Trophy, RotateCcw, Home, Star, Award, Clock, Target } from 'lucide-react'
 import AchievementToast from '@/components/AchievementToast'
 
 export default function MatchEndScreen() {
-  const { setScreen, statistics, playerName, achievements } = useGameStore()
+  const { setScreen, statistics, playerName, achievements, matchState, addRoundScore } = useGameStore()
   const [showToast, setShowToast] = useState(false)
   const [newAchievement, setNewAchievement] = useState<typeof achievements[0] | null>(null)
 
   const winner = sessionStorage.getItem('lastWinner') || 'الكمبيوتر'
   const points = sessionStorage.getItem('lastRoundPoints') || '0'
   const moves = sessionStorage.getItem('movesCount') || '0'
+  // FIXED: Read duration from sessionStorage
+  const duration = parseInt(sessionStorage.getItem('gameDuration') || '0')
   const isPlayerWin = winner === playerName
 
   // Check for newly unlocked achievements
@@ -41,6 +43,13 @@ export default function MatchEndScreen() {
 
   const handleMainMenu = () => {
     setScreen('menu')
+  }
+
+  // Format duration as MM:SS
+  const formatDuration = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
   return (
@@ -76,10 +85,26 @@ export default function MatchEndScreen() {
             <span className="text-white/60">عدد الحركات</span>
             <span className="text-xl font-bold text-white">{moves}</span>
           </div>
+          {/* FIXED: Show duration */}
+          <div className="flex justify-between items-center">
+            <span className="text-white/60 flex items-center gap-2">
+              <Clock size={16} /> المدة
+            </span>
+            <span className="text-xl font-bold text-white">{formatDuration(duration)}</span>
+          </div>
           <div className="flex justify-between items-center">
             <span className="text-white/60">إجمالي الألعاب</span>
             <span className="text-xl font-bold text-white">{statistics.gamesPlayed}</span>
           </div>
+          {/* FIXED: Show best time if available */}
+          {statistics.bestTime > 0 && (
+            <div className="flex justify-between items-center">
+              <span className="text-white/60 flex items-center gap-2">
+                <Target size={16} /> أفضل وقت
+              </span>
+              <span className="text-xl font-bold text-green-400">{formatDuration(statistics.bestTime)}</span>
+            </div>
+          )}
           <div className="flex justify-between items-center">
             <span className="text-white/60">الإنجازات</span>
             <span className="text-xl font-bold text-yellow-400">
