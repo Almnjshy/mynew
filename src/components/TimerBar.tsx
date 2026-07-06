@@ -1,62 +1,86 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface TimerBarProps {
-  timeLimit: number // in seconds
-  isActive: boolean
+  duration: number // seconds
   onTimeUp: () => void
-  playerTurn: boolean
+  isActive: boolean
+  key?: number | string // Force re-mount when key changes
 }
 
-export default function TimerBar({ timeLimit, isActive, onTimeUp, playerTurn }: TimerBarProps) {
-  const [timeLeft, setTimeLeft] = useState(timeLimit)
-  const [isWarning, setIsWarning] = useState(false)
+export default function TimerBar({ duration, onTimeUp, isActive }: TimerBarProps) {
+  const [progress, setProgress] = useState(100)
+  const [warning, setWarning] = useState(false)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const startTimeRef = useRef<number>(0)
+  const durationRef = useRef(duration)
+  const onTimeUpRef = useRef(onTimeUp)
+  const isActiveRef = useRef(isActive)
+
+  // Keep refs in sync
+  useEffect(() => {
+    durationRef.current = duration
+    onTimeUpRef.current = onTimeUp
+    isActiveRef.current = isActive
+  })
 
   useEffect(() => {
-    if (!isActive || timeLimit <= 0) {
-      setTimeLeft(timeLimit)
-      setIsWarning(false)
+    // Clear any existing interval first
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+
+    if (!isActive || duration <= 0) {
+      setProgress(100)
+      setWarning(false)
       return
     }
 
-    setTimeLeft(timeLimit)
-    setIsWarning(false)
+    startTimeRef.current = Date.now()
+    setProgress(100)
+    setWarning(false)
 
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => {
-        const newTime = prev - 0.1
-        if (newTime <= timeLimit * 0.3) {
-          setIsWarning(true)
+    intervalRef.current = setInterval(() => {
+      const elapsed = (Date.now() - startTimeRef.current) / 1000
+      const remaining = Math.max(0, durationRef.current - elapsed)
+      const pct = (remaining / durationRef.current) * 100
+
+      setProgress(pct)
+
+      if (pct <= 30 && !warning) {
+        setWarning(true)
+      }
+
+      if (remaining <= 0) {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current)
+          intervalRef.current = null
         }
-        if (newTime <= 0) {
-          clearInterval(interval)
-          onTimeUp()
-          return 0
+        // Call onTimeUp only if still active
+        if (isActiveRef.current) {
+          onTimeUpRef.current()
         }
-        return newTime
-      })
+      }
     }, 100)
 
-    return () => clearInterval(interval)
-  }, [isActive, timeLimit, onTimeUp])
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+    }
+  }, [isActive, duration]) // Re-run when isActive or duration changes
 
-  if (timeLimit <= 0 || !playerTurn) return null
-
-  const percentage = (timeLeft / timeLimit) * 100
-  const barColor = isWarning ? 'bg-red-500' : percentage > 50 ? 'bg-green-500' : 'bg-yellow-500'
+  if (!isActive || duration <= 0) return null
 
   return (
-    <div className="w-full px-4 py-1">
-      <div className="flex items-center gap-2">
-        <div className="text-white text-xs font-mono w-10 text-right">
-          {Math.ceil(timeLeft)}ث
-        </div>
-        <div className="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
-          <div
-            className={`h-full ${barColor} rounded-full transition-all duration-100 ${isWarning ? 'animate-pulse' : ''}`}
-            style={{ width: `${percentage}%` }}
-          />
-        </div>
-      </div>
+    <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+      <div
+        className={`h-full transition-all duration-100 rounded-full ${
+          warning ? 'bg-red-500 animate-pulse' : 'bg-yellow-500'
+        }`}
+        style={{ width: `${progress}%` }}
+      />
     </div>
   )
 }
