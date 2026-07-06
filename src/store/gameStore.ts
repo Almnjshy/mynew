@@ -5,7 +5,6 @@ import type {
   GameSettings,
   Statistics,
   Achievement,
-  HistoryEntry,
   LeaderboardEntry,
   MatchState,
   Screen,
@@ -95,6 +94,7 @@ export interface GameStore {
   screenHistory: Screen[]
   pushScreen: (screen: Screen) => void
   popScreen: () => Screen | null
+  goBack: () => void
 }
 
 export const useGameStore = create<GameStore>()(
@@ -102,10 +102,15 @@ export const useGameStore = create<GameStore>()(
     (set, get) => ({
       screen: 'title',
       previousScreen: null,
+      // FIXED: Now properly updates screenHistory for navigation
       setScreen: (screen) => {
         const current = get().screen
         if (current !== screen) {
-          set({ previousScreen: current, screen })
+          set({ 
+            previousScreen: current, 
+            screen,
+            screenHistory: [...get().screenHistory, current]
+          })
         }
       },
       playerName: 'لاعب',
@@ -118,10 +123,16 @@ export const useGameStore = create<GameStore>()(
           settings: { ...state.settings, ...newSettings },
         })),
       statistics: defaultStatistics,
-      // FIXED: Now properly increments instead of replacing
+      // FIXED: Properly handles winStreak and bestWinStreak logic
       updateStatistics: (stats) =>
         set((state) => {
           const current = state.statistics
+          
+          // Calculate new win streak
+          const newWinStreak = stats.gamesWon 
+            ? current.winStreak + stats.gamesWon 
+            : (stats.gamesLost ? 0 : current.winStreak)
+          
           const updated: Statistics = {
             gamesPlayed: current.gamesPlayed + (stats.gamesPlayed || 0),
             gamesWon: current.gamesWon + (stats.gamesWon || 0),
@@ -135,9 +146,9 @@ export const useGameStore = create<GameStore>()(
                 : Math.min(current.bestTime, stats.bestTime)
               : current.bestTime,
             draws: current.draws + (stats.draws || 0),
-            winStreak: stats.gamesWon ? current.winStreak + stats.gamesWon : 0,
-            bestWinStreak: Math.max(current.bestWinStreak, 
-              stats.gamesWon ? current.winStreak + stats.gamesWon : current.winStreak),
+            winStreak: newWinStreak,
+            // FIXED: bestWinStreak now correctly tracks the highest streak ever
+            bestWinStreak: Math.max(current.bestWinStreak, newWinStreak),
           }
           return { statistics: updated }
         }),
@@ -157,7 +168,7 @@ export const useGameStore = create<GameStore>()(
               : a
           ),
         })),
-      // NEW: Check achievements based on progress
+      // Check achievements based on progress
       checkAndUnlockAchievements: (progress) => {
         const state = get()
         const newlyUnlocked: string[] = []
@@ -279,12 +290,34 @@ export const useGameStore = create<GameStore>()(
         set((state) => ({
           screenHistory: [...state.screenHistory, screen],
         })),
+      // FIXED: Properly handles navigation back
       popScreen: () => {
         const history = get().screenHistory
         if (history.length === 0) return null
         const previous = history[history.length - 1]
-        set({ screenHistory: history.slice(0, -1), screen: previous })
+        const newHistory = history.slice(0, -1)
+        const newPrevious = newHistory.length > 0 ? newHistory[newHistory.length - 1] : null
+        set({ 
+          screenHistory: newHistory, 
+          screen: previous,
+          previousScreen: newPrevious
+        })
         return previous
+      },
+      // NEW: Helper for Android back button
+      goBack: () => {
+        const history = get().screenHistory
+        if (history.length === 0) {
+          // At root screen, maybe exit app
+          return
+        }
+        const previous = history[history.length - 1]
+        const newHistory = history.slice(0, -1)
+        set({ 
+          screenHistory: newHistory, 
+          screen: previous,
+          previousScreen: newHistory.length > 0 ? newHistory[newHistory.length - 1] : null
+        })
       },
     }),
     {
@@ -298,6 +331,7 @@ export const useGameStore = create<GameStore>()(
         achievements: state.achievements,
         gameHistory: state.gameHistory,
         leaderboard: state.leaderboard,
+        // Don't persist navigation state
       }),
     }
   )
