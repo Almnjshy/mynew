@@ -88,6 +88,20 @@ export interface MatchState {
   opponentTotal: number
 }
 
+// ============================================================
+// SNAKE BOARD POSITION TRACKING
+// Each tile on the board has a position and rotation
+// ============================================================
+export interface BoardTile extends DominoTile {
+  // Grid position (row, col) in the snake layout
+  row: number
+  col: number
+  // Rotation: 0 = vertical, 90 = horizontal, 180 = vertical flipped, 270 = horizontal flipped
+  rotation: number
+  // Which end of the domino chain this tile connects to
+  isLeft: boolean
+}
+
 export interface DominoTile {
   top: number
   bottom: number
@@ -96,20 +110,33 @@ export interface DominoTile {
 
 export type TileEnd = 'left' | 'right'
 
+export interface Player {
+  id: string
+  name: string
+  avatar: string
+  hand: DominoTile[]
+  score: number
+  isAI: boolean
+}
+
 export interface GameState {
-  board: DominoTile[]
-  players: {
-    name: string
-    avatar: string
-    hand: DominoTile[]
-    score: number
-  }[]
-  currentPlayer: number
+  board: BoardTile[]
+  players: Player[]
+  currentPlayerIndex: number
   stock: DominoTile[]
+  round: number
   isGameOver: boolean
-  winner: number | null
-  leftEnd: number
-  rightEnd: number
+  winner: Player | null
+  lastMove: { playerId: string; tile: DominoTile; end: TileEnd } | null
+  isBlocked: boolean
+  // Snake layout tracking
+  snakeDirection: 'right' | 'left' | 'down'
+  snakeRow: number
+  snakeCol: number
+  maxRow: number
+  minRow: number
+  maxCol: number
+  minCol: number
 }
 
 export const TIMER_CONFIG: Record<TimerMode, { time: number; label: string }> = {
@@ -126,3 +153,11 @@ export const GAME_MODE_CONFIG: Record<GameMode, { label: string; desc: string }>
   allFives: { label: 'الخمسات', desc: 'مجموع 5 يعطي نقاط' },
   draw: { label: 'السحب', desc: 'اسحب من المخزون' },
 }
+
+// Screen types including tournament screens
+export type Screen = 
+  | 'title' | 'menu' | 'levelSelect' | 'game' | 'matchEnd' 
+  | 'settings' | 'statistics' | 'achievements' | 'history' 
+  | 'profile' | 'leaderboard' | 'wifiGame' | 'onlineGame'
+  | 'tournamentMenu' | 'tournamentCreate' | 'tournamentBracket' 
+  | 'tournamentGame' | 'tournamentHistory'
