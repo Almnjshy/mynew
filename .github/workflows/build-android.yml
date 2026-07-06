@@ -39,6 +39,27 @@ jobs:
       - name: Sync Android
         run: npx cap sync android
 
+      - name: Fix build.gradle after sync
+        run: |
+          cat > android/build.gradle << 'EOF'
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.2.1'
+              }
+          }
+
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          EOF
+
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
