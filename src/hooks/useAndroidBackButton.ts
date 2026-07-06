@@ -9,9 +9,10 @@ import { useGameStore } from '@/store/gameStore'
  */
 
 export function useAndroidBackButton() {
-  const { screen, setScreen } = useGameStore()
+  const { screen, popScreen, goBack, setScreen } = useGameStore()
   const [showExitConfirm, setShowExitConfirm] = useState(false)
 
+  // FIXED: Added tournament screens
   const screenHierarchy: Record<string, string> = {
     'menu': 'title',
     'levelSelect': 'menu',
@@ -25,32 +26,48 @@ export function useAndroidBackButton() {
     'leaderboard': 'menu',
     'wifiGame': 'menu',
     'onlineGame': 'menu',
+    // NEW: Tournament screens
+    'tournamentMenu': 'menu',
+    'tournamentCreate': 'tournamentMenu',
+    'tournamentBracket': 'tournamentMenu',
+    'tournamentGame': 'tournamentBracket',
+    'tournamentHistory': 'tournamentMenu',
   }
 
   const handleBackButton = useCallback(() => {
-    if (screen === 'game') {
-      setShowExitConfirm(true)
-      return true // Prevent default back
-    }
-
+    // If showing exit confirmation, just hide it
     if (showExitConfirm) {
       setShowExitConfirm(false)
       return true
     }
 
-    const previousScreen = screenHierarchy[screen]
-    if (previousScreen) {
-      setScreen(previousScreen as any)
+    // In game: show exit confirmation
+    if (screen === 'game') {
+      setShowExitConfirm(true)
       return true // Prevent default back
     }
 
+    // FIXED: Use popScreen first (proper history management)
+    const popped = popScreen()
+    if (popped) {
+      return true
+    }
+
+    // Fallback to hierarchy if popScreen fails
+    const previousScreen = screenHierarchy[screen]
+    if (previousScreen) {
+      setScreen(previousScreen as any)
+      return true
+    }
+
+    // On title screen: allow app to close
     if (screen === 'title') {
-      // Allow app to close on title screen
       return false
     }
 
     return false
-  }, [screen, showExitConfirm, setScreen])
+  // FIXED: Removed showExitConfirm from dependencies (causes stale closure)
+  }, [screen, popScreen, goBack, setScreen])
 
   useEffect(() => {
     let cleanup: (() => void) | undefined
@@ -67,13 +84,16 @@ export function useAndroidBackButton() {
         listener.then(l => l.remove())
       }
     } catch {
-      // Fallback to browser events for web
-      const handlePopState = () => {
-        handleBackButton()
+      // FIXED: Better fallback for web
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape' || e.key === 'Backspace') {
+          e.preventDefault()
+          handleBackButton()
+        }
       }
-      window.addEventListener('popstate', handlePopState)
+      window.addEventListener('keydown', handleKeyDown)
       cleanup = () => {
-        window.removeEventListener('popstate', handlePopState)
+        window.removeEventListener('keydown', handleKeyDown)
       }
     }
 
