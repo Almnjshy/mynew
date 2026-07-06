@@ -25,10 +25,24 @@ import TournamentGameScreen from './screens/TournamentGameScreen'
 import TournamentHistoryScreen from './screens/TournamentHistoryScreen'
 
 function App() {
-  const { screen } = useGameStore()
+  const { screen, previousScreen } = useGameStore()
 
   // Initialize Android back button handler
-  useAndroidBackButton()
+  const { showExitConfirm } = useAndroidBackButton()
+
+  // FIXED: Add keyboard support for desktop (Escape key)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && screen !== 'title') {
+        e.preventDefault()
+        // Trigger back button logic
+        const event = new CustomEvent('androidBackButton')
+        window.dispatchEvent(event)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [screen])
 
   useEffect(() => {
     const preventZoom = (e: TouchEvent) => {
