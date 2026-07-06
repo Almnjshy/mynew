@@ -11,7 +11,7 @@ import { ArrowLeft, RotateCcw, Trophy, Lightbulb, Users, User } from 'lucide-rea
 import TimerBar from '@/components/TimerBar'
 import SnakeBoard from '@/components/SnakeBoard'
 import DominoTileComponent from '@/components/DominoTile'
-import ExitConfirmation from '@/components/ExitConfirmation'
+import { ExitConfirmation } from '@/components/ExitConfirmation'
 import { soundEngine } from '@/lib/soundEngine'
 
 export default function GameScreen() {
@@ -353,6 +353,7 @@ export default function GameScreen() {
       {/* Exit Confirmation Modal */}
       {showExitConfirm && (
         <ExitConfirmation 
+          isVisible={showExitConfirm}
           onConfirm={confirmExit} 
           onCancel={() => setShowExitConfirm(false)} 
         />
