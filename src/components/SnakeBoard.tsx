@@ -4,11 +4,6 @@ interface Props {
   board: BoardTile[]
 }
 
-// Tile dimensions
-const TILE_W = 50   // Width of vertical tile
-const TILE_H = 100  // Height of vertical tile
-const GAP = 4       // Gap between tiles
-
 export default function SnakeBoard({ board }: Props) {
   if (board.length === 0) {
     return (
@@ -18,75 +13,49 @@ export default function SnakeBoard({ board }: Props) {
     )
   }
 
-  // Calculate bounds
-  const rows = board.map(t => t.row)
-  const cols = board.map(t => t.col)
-  const minRow = Math.min(...rows)
-  const maxRow = Math.max(...rows)
-  const minCol = Math.min(...cols)
-  const maxCol = Math.max(...cols)
+  // Find bounds for centering
+  const xs = board.map(t => t.x)
+  const ys = board.map(t => t.y)
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs)
+  const minY = Math.min(...ys)
+  const maxY = Math.max(...ys)
 
-  const cellW = TILE_W + GAP
-  const cellH = TILE_H + GAP
-
-  const containerWidth = (maxCol - minCol + 1) * cellW
-  const containerHeight = (maxRow - minRow + 1) * cellH
+  const centerX = (minX + maxX) / 2
+  const centerY = (minY + maxY) / 2
 
   return (
     <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
-      <div 
-        className="relative"
-        style={{
-          width: Math.max(containerWidth, cellW),
-          height: Math.max(containerHeight, cellH),
-        }}
-      >
-        {board.map((tile, index) => {
-          const x = (tile.col - minCol) * cellW
-          const y = (tile.row - minRow) * cellH
-
-          // FIXED: Apply rotation based on tile.rotation
-          const isHorizontal = tile.rotation === 90 || tile.rotation === 270
-          const tileWidth = isHorizontal ? TILE_H : TILE_W
-          const tileHeight = isHorizontal ? TILE_W : TILE_H
+      <div className="relative">
+        {board.map((tile) => {
+          // Calculate display dimensions based on rotation
+          const isVertical = tile.rotation === 0 || tile.rotation === 180
+          const width = isVertical ? 40 : 80
+          const height = isVertical ? 80 : 40
 
           return (
             <div
               key={tile.id}
               className="absolute"
               style={{
-                left: x,
-                top: y,
-                width: tileWidth,
-                height: tileHeight,
-                zIndex: index,
+                left: tile.x - centerX + 200,  // Center in container
+                top: tile.y - centerY + 150,
+                width: width,
+                height: height,
                 transform: `rotate(${tile.rotation}deg)`,
                 transformOrigin: 'center center',
               }}
             >
-              <div className="w-full h-full bg-[#f5f0e6] border-2 border-[#8b7355] rounded-lg flex flex-col overflow-hidden shadow-md">
-                {/* Top half */}
+              <div className="w-full h-full bg-[#f5f0e6] border border-[#8b7355] rounded-md flex flex-col overflow-hidden shadow-md">
+                {/* Top half - always the connected side (inner) */}
                 <div className="flex-1 flex items-center justify-center border-b border-[#8b7355]/40 relative">
-                  <Dots count={tile.top} />
+                  <Dots count={tile.connectedValue} />
                 </div>
-                {/* Bottom half */}
+                {/* Bottom half - always the exposed side (outer) */}
                 <div className="flex-1 flex items-center justify-center relative">
-                  <Dots count={tile.bottom} />
+                  <Dots count={tile.exposedValue} />
                 </div>
               </div>
-
-              {/* Connection indicator (small dot on connecting side) */}
-              {index > 0 && (
-                <div 
-                  className="absolute w-2 h-2 bg-[#8b7355] rounded-full"
-                  style={{
-                    ...(tile.col > board[index-1].col ? { right: -5, top: '50%', transform: 'translateY(-50%)' } :
-                       tile.col < board[index-1].col ? { left: -5, top: '50%', transform: 'translateY(-50%)' } :
-                       tile.row > board[index-1].row ? { bottom: -5, left: '50%', transform: 'translateX(-50%)' } :
-                       { top: -5, left: '50%', transform: 'translateX(-50%)' })
-                  }}
-                />
-              )}
             </div>
           )
         })}
