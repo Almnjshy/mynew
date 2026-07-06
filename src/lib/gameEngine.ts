@@ -66,9 +66,13 @@ export const dealTiles = (players: Player[], stock: DominoTile[]): { players: Pl
 export const getBoardEnds = (board: BoardTile[]): { leftValue: number; rightValue: number } => {
   if (board.length === 0) return { leftValue: -1, rightValue: -1 }
 
+  // Left end: the OUTWARD-facing value of the first tile
+  // If isLeft=true, top faces outward (left)
   const leftTile = board[0]
   const leftValue = leftTile.isLeft ? leftTile.top : leftTile.bottom
 
+  // Right end: the OUTWARD-facing value of the last tile
+  // If isLeft=true, bottom faces outward (right)
   const rightTile = board[board.length - 1]
   const rightValue = rightTile.isLeft ? rightTile.bottom : rightTile.top
 
@@ -109,6 +113,8 @@ function getCurrentSnakeState(board: BoardTile[]): SnakeState {
   }
 
   const lastTile = board[board.length - 1]
+
+  // Determine direction based on row (even=right, odd=left)
   const direction: 'right' | 'left' = lastTile.row % 2 === 0 ? 'right' : 'left'
 
   return {
@@ -120,12 +126,14 @@ function getCurrentSnakeState(board: BoardTile[]): SnakeState {
 
 function calculateNextPosition(board: BoardTile[], end: TileEnd): { row: number; col: number; isLeft: boolean } {
   if (board.length === 0) {
+    // First tile at center
     return { row: 0, col: 0, isLeft: true }
   }
 
   const state = getCurrentSnakeState(board)
 
   if (end === 'left') {
+    // Playing on the left end - extend opposite to current direction
     const firstTile = board[0]
     const firstState: SnakeState = {
       row: firstTile.row,
@@ -133,13 +141,17 @@ function calculateNextPosition(board: BoardTile[], end: TileEnd): { row: number;
       direction: firstTile.row % 2 === 0 ? 'right' : 'left'
     }
 
+    // Move opposite to the first tile's direction
     if (firstState.direction === 'right') {
+      // First row goes right, so left end extends left
       const newCol = firstTile.col - 1
       if (newCol < 0) {
+        // Need to wrap to previous row
         return { row: firstTile.row - 1, col: 0, isLeft: true }
       }
       return { row: firstTile.row, col: newCol, isLeft: true }
     } else {
+      // First row goes left, so left end extends right
       const newCol = firstTile.col + 1
       if (newCol >= TILES_PER_ROW) {
         return { row: firstTile.row - 1, col: TILES_PER_ROW - 1, isLeft: true }
@@ -147,13 +159,17 @@ function calculateNextPosition(board: BoardTile[], end: TileEnd): { row: number;
       return { row: firstTile.row, col: newCol, isLeft: true }
     }
   } else {
+    // Playing on the right end - extend in current direction
     const newCol = state.direction === 'right' ? state.col + 1 : state.col - 1
 
+    // Check if we need to turn down
     if (state.direction === 'right' && newCol >= TILES_PER_ROW) {
+      // Turn down and go left
       return { row: state.row + 1, col: state.col, isLeft: false }
     }
 
     if (state.direction === 'left' && newCol < 0) {
+      // Turn down and go right
       return { row: state.row + 1, col: 0, isLeft: false }
     }
 
@@ -164,9 +180,9 @@ function calculateNextPosition(board: BoardTile[], end: TileEnd): { row: number;
 // FIXED: Calculate rotation based on snake direction and position
 function calculateRotation(board: BoardTile[], end: TileEnd, position: { row: number; col: number; isLeft: boolean }): number {
   if (board.length === 0) return 0 // First tile: vertical
-  
+
   const state = getCurrentSnakeState(board)
-  
+
   if (end === 'left') {
     // Left end extends opposite to first tile's direction
     const firstTile = board[0]
@@ -342,7 +358,7 @@ export const createInitialState = (playerNames: string[], playerAvatars: string[
 function canAnyOpponentPlay(board: BoardTile[], players: Player[], currentPlayerIndex: number): boolean {
   const { leftValue, rightValue } = getBoardEnds(board)
   const boardEnds = [leftValue, rightValue]
-  
+
   for (let i = 0; i < players.length; i++) {
     if (i === currentPlayerIndex) continue // Skip current player
     for (const tile of players[i].hand) {
@@ -358,13 +374,13 @@ function canAnyOpponentPlay(board: BoardTile[], players: Player[], currentPlayer
 function countNumbersInPlay(state: GameState, playerIndex: number): Map<number, number> {
   const counts = new Map<number, number>()
   for (let i = 0; i <= 6; i++) counts.set(i, 0)
-  
+
   // Count in stock
   for (const tile of state.stock) {
     counts.set(tile.top, (counts.get(tile.top) || 0) + 1)
     counts.set(tile.bottom, (counts.get(tile.bottom) || 0) + 1)
   }
-  
+
   // Count in all players' hands (including AI)
   for (const player of state.players) {
     for (const tile of player.hand) {
@@ -372,7 +388,7 @@ function countNumbersInPlay(state: GameState, playerIndex: number): Map<number, 
       counts.set(tile.bottom, (counts.get(tile.bottom) || 0) + 1)
     }
   }
-  
+
   return counts
 }
 
@@ -381,35 +397,35 @@ function scoreMove(state: GameState, playerIndex: number, move: { tileIndex: num
   const tile = state.players[playerIndex].hand[move.tileIndex]
   const { leftValue, rightValue } = getBoardEnds(state.board)
   const connectValue = move.end === 'left' ? leftValue : rightValue
-  
+
   let score = 0
-  
+
   // Base: prefer high-value tiles and doubles
   score += (tile.top === tile.bottom ? 15 : 0) + tile.top + tile.bottom
-  
+
   if (difficulty === 'hard') {
     // Simulate the move
     const newBoard = move.end === 'left'
       ? [{ ...tile, row: 0, col: 0, rotation: 0, isLeft: true, top: tile.top === connectValue ? tile.top : tile.bottom, bottom: tile.top === connectValue ? tile.bottom : tile.top }, ...state.board]
       : [...state.board, { ...tile, row: 0, col: 0, rotation: 0, isLeft: false, top: tile.top === connectValue ? tile.top : tile.bottom, bottom: tile.top === connectValue ? tile.bottom : tile.top }]
-    
+
     // Blocking bonus: if move blocks opponents
     if (!canAnyOpponentPlay(newBoard as BoardTile[], state.players, playerIndex)) {
       score += 50 // High bonus for blocking
     }
-    
+
     // End control: prefer moves that leave useful ends
     const newEnds = getBoardEnds(newBoard as BoardTile[])
     const numberCounts = countNumbersInPlay(state, playerIndex)
     const endCount = (numberCounts.get(newEnds.leftValue) || 0) + (numberCounts.get(newEnds.rightValue) || 0)
     score += endCount * 2 // More tiles matching the ends = better control
-    
+
     // Penalize leaving doubles if possible (doubles are harder to play)
     if (tile.top === tile.bottom) {
       score -= 5 // Slight penalty for playing doubles (save them)
     }
   }
-  
+
   return score
 }
 
