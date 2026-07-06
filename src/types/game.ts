@@ -78,6 +78,9 @@ export interface AchievementProgress {
   comebacks: number
 }
 
+// ============================================================
+// FIXED: MatchState now includes isMatchOver and matchWinner
+// ============================================================
 export interface MatchState {
   round: number
   playerScore: number
@@ -86,19 +89,17 @@ export interface MatchState {
   scores: { player: number; ai: number }[]
   playerTotal: number
   opponentTotal: number
+  isMatchOver: boolean
+  matchWinner: string | null
 }
 
 // ============================================================
-// SNAKE BOARD POSITION TRACKING
-// Each tile on the board has a position and rotation
+// BoardTile with position and rotation for snake layout
 // ============================================================
 export interface BoardTile extends DominoTile {
-  // Position (x, y) in pixels for chain layout
   x: number
   y: number
-  // Rotation: 0 = vertical, 90 = horizontal right, 180 = vertical flipped, 270 = horizontal left
   rotation: number
-  // Which end of the domino chain this tile connects to
   isLeft: boolean
 }
 
@@ -119,6 +120,15 @@ export interface Player {
   isAI: boolean
 }
 
+// ============================================================
+// FIXED: MoveResult now properly defined
+// ============================================================
+export interface MoveResult {
+  valid: boolean
+  message?: string
+  newState?: GameState
+}
+
 export interface GameState {
   board: BoardTile[]
   players: Player[]
@@ -129,7 +139,6 @@ export interface GameState {
   winner: Player | null
   lastMove: { playerId: string; tile: DominoTile; end: TileEnd } | null
   isBlocked: boolean
-  // Snake layout tracking
   snakeDirection: 'right' | 'left' | 'down'
   snakeRow: number
   snakeCol: number
@@ -154,7 +163,6 @@ export const GAME_MODE_CONFIG: Record<GameMode, { label: string; desc: string }>
   draw: { label: 'السحب', desc: 'اسحب من المخزون' },
 }
 
-// Screen types including tournament screens
 export type Screen = 
   | 'title' | 'menu' | 'levelSelect' | 'game' | 'matchEnd' 
   | 'settings' | 'statistics' | 'achievements' | 'history' 
