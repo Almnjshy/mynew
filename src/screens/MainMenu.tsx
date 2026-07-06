@@ -1,6 +1,6 @@
 import { useGameStore } from '@/store/gameStore'
 import { soundEngine } from '@/lib/soundEngine'
-import { Trophy, Settings, BarChart3, Play, Wifi, Globe, User, Crown } from 'lucide-react'
+import { Trophy, Settings, BarChart3, Play, Wifi, Globe, User, Crown, Swords } from 'lucide-react'
 
 export default function MainMenu() {
   const { setScreen, playerName, playerAvatar } = useGameStore()
@@ -43,11 +43,15 @@ export default function MainMenu() {
           <User size={20} className="text-white/40" />
         </button>
 
-        <img src="/assets/trophy.png" alt="Trophy" className="trophy-img" />
+        <img src="./assets/trophy.png" alt="Trophy" className="trophy-img" />
         <h1 className="text-4xl font-bold gold-accent mb-2">DOMINO</h1>
 
         <button onClick={() => handleNavigate('levelSelect')} className="game-btn game-btn-primary w-full gap-3">
           <Play size={24} /> ابدأ اللعب
+        </button>
+
+        <button onClick={() => handleNavigate('tournamentMenu')} className="game-btn game-btn-primary w-full gap-3 border-2 border-yellow-500/50">
+          <Swords size={24} /> البطولات
         </button>
 
         <button onClick={() => handleNavigate('leaderboard')} className="game-btn game-btn-secondary w-full gap-3">

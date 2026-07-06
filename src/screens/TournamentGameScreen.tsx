@@ -1,24 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useGameStore } from '@/store/gameStore'
-import { 
-  createInitialState, playTile, drawFromStock, getValidEnds, getAIMove, 
-  calculateScore, isGameBlocked, getBlockedWinner, canPlayerPlay, skipTurn,
-  getBoardEnds
-} from '@/lib/gameEngine'
+import { useTournamentStore } from '@/store/tournamentStore'
+import { createInitialState, playTile, drawFromStock, getValidEnds, getAIMove, calculateScore, isGameBlocked, getBlockedWinner, canPlayerPlay, skipTurn } from '@/lib/gameEngine'
 import { getBestMove, getHintMessage, shouldDraw } from '@/lib/hintEngine'
-import { GameState, DominoTile, TileEnd, TIMER_CONFIG, BoardTile } from '@/types/game'
-import { ArrowLeft, RotateCcw, Trophy, Lightbulb, Users, User } from 'lucide-react'
+import { GameState, DominoTile, TileEnd, TIMER_CONFIG } from '@/types/game'
+import { ArrowLeft, RotateCcw, Trophy, Lightbulb } from 'lucide-react'
 import TimerBar from '@/components/TimerBar'
-import SnakeBoard from '@/components/SnakeBoard'
+import Board from '@/components/Board'
 import DominoTileComponent from '@/components/DominoTile'
 import { soundEngine } from '@/lib/soundEngine'
 
-export default function GameScreen() {
-  const { 
-    setScreen, settings, updateStatistics, checkAndUnlockAchievements,
-    playerName, playerAvatar, matchState, addRoundScore, initMatchState,
-    statistics
-  } = useGameStore()
+export default function TournamentGameScreen() {
+  const { setScreen, settings, playerName, playerAvatar, statistics } = useGameStore()
+  const { activeTournament, completeMatch, simulateAIMatches } = useTournamentStore()
 
   const [gameState, setGameState] = useState<GameState | null>(null)
   const [selectedTile, setSelectedTile] = useState<number | null>(null)
@@ -28,6 +22,7 @@ export default function GameScreen() {
   const [hintMessage, setHintMessage] = useState('')
   const [bestMove, setBestMove] = useState<{ tileIndex: number; end: TileEnd } | null>(null)
   const [timerKey, setTimerKey] = useState(0)
+  const [matchResult, setMatchResult] = useState<'win' | 'loss' | null>(null)
 
   const moveCountRef = useRef(0)
   const playerDrawCountRef = useRef(0)
@@ -39,35 +34,46 @@ export default function GameScreen() {
     return TIMER_CONFIG[settings.timerMode].time
   }, [settings.timerMode, settings.customTime])
 
-  // Generate AI names based on count
-  const getAINames = useCallback((count: number): string[] => {
-    const names = ['الكمبيوتر', 'الذكي', 'المحارب', 'الأسطورة', 'البطل']
-    return names.slice(0, count)
-  }, [])
-
-  const getAIAvatars = useCallback((count: number): string[] => {
-    return Array(count).fill('/assets/avatar_ai.png')
-  }, [])
-
-  // Initialize game
+  // Initialize game with tournament settings
   useEffect(() => {
-    const aiCount = Math.min(Math.max(settings.aiCount || 1, 1), 4)
-    const aiNames = getAINames(aiCount)
-    const aiAvatars = getAIAvatars(aiCount)
+    if (!activeTournament) {
+      setScreen('tournamentBracket')
+      return
+    }
 
-    const allNames = [playerName, ...aiNames]
-    const allAvatars = [playerAvatar, ...aiAvatars]
+    // Get current match opponent
+    const currentRound = activeTournament.rounds[activeTournament.currentRound]
+    const currentMatch = currentRound?.matches[activeTournament.currentMatch]
 
-    const state = createInitialState(allNames, allAvatars)
+    if (!currentMatch) {
+      setScreen('tournamentBracket')
+      return
+    }
+
+    const opponent = currentMatch.player1?.id === 'player_0' 
+      ? currentMatch.player2 
+      : currentMatch.player1
+
+    if (!opponent) {
+      setScreen('tournamentBracket')
+      return
+    }
+
+    const state = createInitialState(
+      [playerName, opponent.name],
+      [playerAvatar, opponent.avatar || '/assets/avatar_ai.png']
+    )
+
     setGameState(state)
     moveCountRef.current = 0
     playerDrawCountRef.current = 0
     playerHasDrawnRef.current = false
     setRoundEnded(false)
-    setHintMessage('')
-    setBestMove(null)
+    setMatchResult(null)
     setTimerKey(prev => prev + 1)
-  }, [playerName, playerAvatar, settings.aiCount])
+
+    soundEngine.playMatchStart()
+  }, [activeTournament, playerName, playerAvatar])
 
   // Hints
   useEffect(() => {
@@ -93,130 +99,84 @@ export default function GameScreen() {
     }
   }, [gameState, settings.showHints, roundEnded])
 
-  // AI Turn - handles ALL AI players (not just player 1)
+  // AI Turn
   useEffect(() => {
     if (!gameState || gameState.isGameOver || roundEnded) return
-    if (gameState.currentPlayerIndex === 0) return // Player's turn
+    if (gameState.currentPlayerIndex === 0) return
 
     const currentPlayer = gameState.players[gameState.currentPlayerIndex]
-    if (!currentPlayer || !currentPlayer.isAI) return
+    if (!currentPlayer.isAI) return
 
     setSelectedTile(null)
     setAiThinking(true)
 
     const timer = setTimeout(() => {
-      handleAITurn(currentPlayer.id)
+      if (isGameBlocked(gameState)) {
+        const blockedWinner = getBlockedWinner(gameState)
+        handleGameEnd(blockedWinner?.id === 'player-0')
+        setAiThinking(false)
+        return
+      }
+
+      if (settings.gameMode === 'block' && !canPlayerPlay(gameState, gameState.currentPlayerIndex)) {
+        const newState = skipTurn(gameState)
+        setGameState(newState)
+        setMessage(`${currentPlayer.name} لا يستطيع اللعب - تخطي`)
+        setAiThinking(false)
+        setTimerKey(prev => prev + 1)
+        return
+      }
+
+      const aiMove = getAIMove(gameState, settings.difficulty)
+
+      if (aiMove) {
+        const result = playTile(gameState, gameState.currentPlayerIndex, aiMove.tileIndex, aiMove.end)
+        if (result.valid && result.newState) {
+          moveCountRef.current += 1
+          setGameState(result.newState)
+
+          if (result.newState.isGameOver) {
+            handleGameEnd(result.newState.winner?.id === 'player-0')
+          }
+        }
+      } else {
+        if (settings.gameMode === 'draw' && gameState.stock.length > 0) {
+          let newState = drawFromStock(gameState, gameState.currentPlayerIndex)
+          while (!canPlayerPlay(newState, gameState.currentPlayerIndex) && newState.stock.length > 0) {
+            newState = drawFromStock(newState, gameState.currentPlayerIndex)
+          }
+          setGameState(newState)
+        } else {
+          const newState = skipTurn(gameState)
+          setGameState(newState)
+        }
+      }
+      setAiThinking(false)
     }, 1500)
 
     return () => clearTimeout(timer)
   }, [gameState, settings.difficulty, roundEnded, settings.gameMode])
 
-  const handleAITurn = (playerId: string) => {
-    if (!gameState) return
-    const playerIndex = gameState.players.findIndex(p => p.id === playerId)
-    if (playerIndex === -1) return
+  const handleGameEnd = (playerWon: boolean) => {
+    setRoundEnded(true)
+    setMatchResult(playerWon ? 'win' : 'loss')
 
-    const currentPlayer = gameState.players[playerIndex]
-
-    // Check if game is blocked
-    if (isGameBlocked(gameState)) {
-      const blockedWinner = getBlockedWinner(gameState)
-      handleRoundEnd(blockedWinner?.id === 'player-0')
-      setAiThinking(false)
-      return
-    }
-
-    // Block mode: skip if can't play
-    if (settings.gameMode === 'block' && !canPlayerPlay(gameState, playerIndex)) {
-      const newState = skipTurn(gameState)
-      setGameState(newState)
-      setMessage(`${currentPlayer.name} لا يستطيع اللعب - تخطي`)
-      setAiThinking(false)
-      setTimerKey(prev => prev + 1)
-      return
-    }
-
-    // Get AI move
-    const aiMove = getAIMove(gameState, playerIndex, settings.difficulty)
-
-    if (aiMove) {
-      const result = playTile(gameState, playerIndex, aiMove.tileIndex, aiMove.end)
-      if (result.valid && result.newState) {
-        moveCountRef.current += 1
-
-        if (settings.gameMode === 'allFives') {
-          const gained = result.newState.players[playerIndex].score - (gameState.players[playerIndex]?.score || 0)
-          if (gained > 0) {
-            setMessage(`${currentPlayer.name} حصل على ${gained} نقطة!`)
-          }
-        }
-
-        setGameState(result.newState)
-        if (result.newState.isGameOver) {
-          handleRoundEnd(result.newState.winner?.id === 'player-0')
-        }
-      }
+    if (playerWon) {
+      soundEngine.playWin()
+      setMessage('🎉 فزت بالمباراة!')
     } else {
-      // Can't play - try to draw
-      if (settings.gameMode === 'draw' && gameState.stock.length > 0) {
-        let newState = drawFromStock(gameState, playerIndex)
-        let drawCount = 1
-        while (!canPlayerPlay(newState, playerIndex) && newState.stock.length > 0 && drawCount < 3) {
-          newState = drawFromStock(newState, playerIndex)
-          drawCount++
-        }
-        setGameState(newState)
-        setMessage(`${currentPlayer.name} سحب ${drawCount} قطع`)
-      } else {
-        const newState = skipTurn(gameState)
-        setGameState(newState)
-        setMessage(`${currentPlayer.name} تخطى دوره`)
-      }
+      soundEngine.playLose()
+      setMessage('😔 خسرت المباراة')
     }
-    setAiThinking(false)
-  }
 
-  const handleRoundEnd = (playerWon: boolean) => {
-    const isWin = playerWon
+    // Calculate scores
     const playerScore = calculateScore(gameState?.players[0]?.hand || [])
-    const opponentScores = gameState?.players.slice(1).map(p => calculateScore(p.hand)) || []
-    const totalOpponentScore = opponentScores.reduce((a, b) => a + b, 0)
+    const opponentScore = calculateScore(gameState?.players[1]?.hand || [])
 
-    const finalPlayerScore = settings.gameMode === 'allFives' 
-      ? gameState?.players[0].score || 0
-      : (isWin ? totalOpponentScore : playerScore)
-
-    sessionStorage.setItem('lastWinner', isWin ? playerName : 'الكمبيوتر')
-    sessionStorage.setItem('lastRoundPoints', String(finalPlayerScore))
-    sessionStorage.setItem('movesCount', String(moveCountRef.current))
-
-    // Update statistics
-    updateStatistics({
-      gamesPlayed: 1,
-      gamesWon: isWin ? 1 : 0,
-      gamesLost: isWin ? 0 : 1,
-      totalScore: finalPlayerScore,
-      highestScore: finalPlayerScore,
-    })
-
-    // Check achievements
-    const newlyUnlocked = checkAndUnlockAchievements({
-      totalGames: statistics.gamesPlayed + 1,
-      totalWins: statistics.gamesWon + (isWin ? 1 : 0),
-      currentStreak: isWin ? statistics.winStreak + 1 : 0,
-      bestStreak: Math.max(statistics.bestWinStreak, isWin ? statistics.winStreak + 1 : 0),
-      cleanWins: statistics.gamesWon + (isWin && !playerHasDrawnRef.current ? 1 : 0),
-      crushingWins: statistics.gamesWon + (isWin && totalOpponentScore === 0 ? 1 : 0),
-      fastestWinMoves: isWin ? moveCountRef.current : statistics.bestTime,
-      totalDraws: playerDrawCountRef.current,
-      comebacks: 0,
-    })
-
-    if (newlyUnlocked.length > 0) {
-      sessionStorage.setItem('newAchievements', JSON.stringify(newlyUnlocked))
-    }
-
-    setTimeout(() => setScreen('matchEnd'), 2000)
+    // Complete tournament match
+    setTimeout(() => {
+      completeMatch(playerWon, playerWon ? opponentScore : playerScore, playerWon ? playerScore : opponentScore)
+    }, 2000)
   }
 
   const handleTileClick = (index: number) => {
@@ -242,7 +202,7 @@ export default function GameScreen() {
       setTimerKey(prev => prev + 1)
 
       if (result.newState.isGameOver) {
-        handleRoundEnd(result.newState.winner?.id === 'player-0')
+        handleGameEnd(result.newState.winner?.id === 'player-0')
       }
     } else {
       soundEngine.playInvalid()
@@ -294,21 +254,21 @@ export default function GameScreen() {
     setTimerKey(prev => prev + 1)
   }
 
-  const handleExit = () => {
+  const handleBackToBracket = () => {
     soundEngine.playClick()
-    setScreen('menu')
+    setScreen('tournamentBracket')
   }
 
   if (!gameState) {
     return (
-      <div className="screen-container table-bg">
+      <div className="screen-container wood-bg">
         <div className="text-white/60">جاري التحميل...</div>
       </div>
     )
   }
 
   const player = gameState.players[0]
-  const currentPlayer = gameState.players[gameState.currentPlayerIndex]
+  const opponent = gameState.players[1]
   const timeLimit = getTimeLimit()
   const isPlayerTurn = gameState.currentPlayerIndex === 0 && !roundEnded
 
@@ -316,28 +276,21 @@ export default function GameScreen() {
     <div className="screen-container table-bg">
       {/* Header */}
       <div className="w-full flex items-center justify-between px-4 py-2">
-        <button onClick={handleExit} className="text-white/60 p-2">
+        <button onClick={handleBackToBracket} className="text-white/60 p-2">
           <ArrowLeft size={24} />
         </button>
         <div className="text-center">
-          <div className="text-yellow-400 font-bold text-sm">
-            {settings.gameMode === 'classic' ? 'كلاسيك' : 
-             settings.gameMode === 'points' ? 'نقاط' :
-             settings.gameMode === 'block' ? 'حظر' :
-             settings.gameMode === 'allFives' ? 'الخمسات' : 'سحب'}
-          </div>
-          <div className="text-white/40 text-xs">
-            {gameState.players.length} لاعبين
+          <div className="text-yellow-400 font-bold text-sm">🏆 بطولة</div>
+          <div className="text-white/60 text-xs">
+            {activeTournament?.rounds[activeTournament.currentRound]?.roundName}
           </div>
         </div>
-        <button onClick={() => {}} className="text-white/60 p-2">
-          <RotateCcw size={24} />
-        </button>
+        <div className="w-10" />
       </div>
 
       {/* Timer */}
       {timeLimit > 0 && isPlayerTurn && (
-        <div className="w-full px-4 mb-1">
+        <div className="w-full px-4 mb-2">
           <TimerBar 
             key={timerKey}
             duration={timeLimit} 
@@ -347,39 +300,34 @@ export default function GameScreen() {
         </div>
       )}
 
-      {/* Opponents Info */}
-      <div className="w-full px-4 py-1">
-        <div className="flex items-center justify-center gap-3 flex-wrap">
-          {gameState.players.slice(1).map((opponent, idx) => (
-            <div 
-              key={opponent.id}
-              className={`flex items-center gap-2 px-3 py-1 rounded-full ${
-                gameState.currentPlayerIndex === idx + 1 
-                  ? 'bg-yellow-500/20 border border-yellow-500/50' 
-                  : 'bg-white/5'
-              }`}
-            >
-              <div className="w-6 h-6 rounded-full bg-white/10 overflow-hidden">
-                <img src={opponent.avatar} alt="" className="w-full h-full object-cover" />
-              </div>
-              <span className="text-white/70 text-xs">{opponent.name}</span>
-              <span className="text-white/40 text-xs">({opponent.hand.length})</span>
-              {gameState.currentPlayerIndex === idx + 1 && aiThinking && (
-                <span className="text-yellow-400 text-xs animate-pulse">يفكر...</span>
-              )}
-            </div>
-          ))}
+      {/* Opponent Info */}
+      <div className="flex items-center gap-3 px-4 py-2">
+        <div className="w-10 h-10 rounded-full bg-white/10 overflow-hidden">
+          <img src={opponent.avatar} alt="" className="w-full h-full object-cover" />
         </div>
+        <div className="text-right">
+          <div className="text-white font-medium text-sm">{opponent.name}</div>
+          <div className="text-white/40 text-xs">{opponent.hand.length} قطعة</div>
+        </div>
+        {aiThinking && (
+          <div className="mr-auto text-yellow-400 text-xs animate-pulse">
+            يفكر...
+          </div>
+        )}
       </div>
 
-      {/* Snake Board */}
-      <div className="flex-1 flex items-center justify-center px-2 py-2 overflow-hidden">
-        <SnakeBoard board={gameState.board} />
+      {/* Game Board */}
+      <div className="flex-1 flex items-center justify-center px-4 py-2 overflow-hidden">
+        <Board tiles={gameState.board} />
       </div>
 
       {/* Message */}
       {message && (
-        <div className="text-center px-4 py-1 text-sm font-medium text-yellow-400">
+        <div className={`text-center px-4 py-2 text-sm font-medium ${
+          matchResult === 'win' ? 'text-green-400' : 
+          matchResult === 'loss' ? 'text-red-400' : 
+          'text-yellow-400'
+        }`}>
           {message}
         </div>
       )}
@@ -403,11 +351,6 @@ export default function GameScreen() {
           <div className="text-yellow-400 font-medium text-sm">{player.name}</div>
           <div className="text-white/40 text-xs">{player.hand.length} قطعة</div>
         </div>
-        {settings.gameMode === 'allFives' && (
-          <div className="mr-auto text-yellow-400 font-bold">
-            {player.score} نقطة
-          </div>
-        )}
       </div>
 
       {/* Player Hand */}
@@ -429,12 +372,12 @@ export default function GameScreen() {
                 >
                   <DominoTileComponent 
                     tile={tile} 
-                    selected={isSelected}
                     highlight={isHinted}
-                    size={player.hand.length > 10 ? 'sm' : player.hand.length > 7 ? 'md' : 'lg'}
+                    small={player.hand.length > 8}
                   />
                 </button>
 
+                {/* Play buttons for selected tile */}
                 {isSelected && validEnds.length > 0 && (
                   <div className="absolute -top-8 left-1/2 -translate-x-1/2 flex gap-1">
                     {validEnds.map((end) => (
@@ -461,7 +404,7 @@ export default function GameScreen() {
           disabled={!isPlayerTurn || roundEnded || gameState.stock.length === 0}
           className="game-btn game-btn-secondary flex-1 text-sm"
         >
-          سحب ({gameState.stock.length})
+          سحب
         </button>
         <button
           onClick={handleSkip}
@@ -471,6 +414,29 @@ export default function GameScreen() {
           تخطي
         </button>
       </div>
+
+      {/* Match Result Overlay */}
+      {matchResult && (
+        <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-center max-w-xs">
+            <Trophy size={64} className={matchResult === 'win' ? 'text-yellow-400 mx-auto mb-4' : 'text-gray-400 mx-auto mb-4'} />
+            <h2 className={`text-3xl font-bold mb-2 ${matchResult === 'win' ? 'text-yellow-400' : 'text-white'}`}>
+              {matchResult === 'win' ? 'فوز!' : 'خسارة'}
+            </h2>
+            <p className="text-white/60 mb-6">
+              {matchResult === 'win' 
+                ? 'تأهلت للجولة التالية!' 
+                : 'تم إقصاؤك من البطولة'}
+            </p>
+            <button 
+              onClick={handleBackToBracket}
+              className="game-btn game-btn-primary w-full"
+            >
+              العودة للجدول
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

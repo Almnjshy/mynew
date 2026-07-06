@@ -1,102 +1,130 @@
+import { useEffect, useState } from 'react'
 import { useGameStore } from '@/store/gameStore'
-import { Trophy, Home, RotateCcw, Target, BarChart3, History, Crown } from 'lucide-react'
+import { Trophy, RotateCcw, Home, Star, Award } from 'lucide-react'
+import AchievementToast from '@/components/AchievementToast'
 
 export default function MatchEndScreen() {
-  const { setScreen, statistics, matchState, settings, resetMatchState, addHistoryEntry, addLeaderboardEntry, playerName, playerAvatar } = useGameStore()
+  const { setScreen, statistics, playerName, achievements } = useGameStore()
+  const [showToast, setShowToast] = useState(false)
+  const [newAchievement, setNewAchievement] = useState<typeof achievements[0] | null>(null)
 
-  const winnerName = sessionStorage.getItem('lastWinner') || 'الكمبيوتر'
-  const isPlayerWin = winnerName === playerName
-  const lastRoundPoints = Number(sessionStorage.getItem('lastRoundPoints') || 0)
-  const movesCount = Number(sessionStorage.getItem('movesCount') || '0')
+  const winner = sessionStorage.getItem('lastWinner') || 'الكمبيوتر'
+  const points = sessionStorage.getItem('lastRoundPoints') || '0'
+  const moves = sessionStorage.getItem('movesCount') || '0'
+  const isPlayerWin = winner === playerName
+
+  // Check for newly unlocked achievements
+  useEffect(() => {
+    const stored = sessionStorage.getItem('newAchievements')
+    if (stored) {
+      try {
+        const unlockedIds: string[] = JSON.parse(stored)
+        if (unlockedIds.length > 0) {
+          // Show first achievement
+          const ach = achievements.find(a => a.id === unlockedIds[0])
+          if (ach) {
+            setNewAchievement(ach)
+            setShowToast(true)
+          }
+          // Clear the stored achievements
+          sessionStorage.removeItem('newAchievements')
+        }
+      } catch {
+        sessionStorage.removeItem('newAchievements')
+      }
+    }
+  }, [achievements])
 
   const handlePlayAgain = () => {
-    resetMatchState()
-    if (settings.gameMode === 'points') {
-      const { initMatchState } = useGameStore.getState()
-      initMatchState(settings.targetScore)
-    }
-    setScreen('game')
+    setScreen('levelSelect')
   }
 
-  const handleMenu = () => {
-    saveGameRecord()
-    saveLeaderboardEntry()
-    resetMatchState()
+  const handleMainMenu = () => {
     setScreen('menu')
   }
 
-  const handleStatistics = () => {
-    saveGameRecord()
-    saveLeaderboardEntry()
-    setScreen('statistics')
-  }
-
-  const saveGameRecord = () => {
-    const startTime = sessionStorage.getItem('gameStartTime')
-    const duration = startTime ? Math.floor((Date.now() - Number(startTime)) / 1000) : undefined
-
-    const record = {
-      id: `game-${Date.now()}`,
-      date: new Date().toISOString(),
-      playerName,
-      opponentName: 'الكمبيوتر',
-      result: isPlayerWin ? 'win' as const : 'loss' as const,
-      gameMode: settings.gameMode,
-      difficulty: settings.difficulty,
-      rounds: matchState?.scores?.length || 1,
-      playerScore: matchState?.playerTotal || (isPlayerWin ? lastRoundPoints : 0),
-      opponentScore: matchState?.opponentTotal || (isPlayerWin ? 0 : lastRoundPoints),
-      targetScore: settings.gameMode === 'points' ? settings.targetScore : undefined,
-      duration,
-    }
-
-    addHistoryEntry(record)
-  }
-
-  const saveLeaderboardEntry = () => {
-    if (!isPlayerWin) return
-
-    const score = matchState?.playerTotal || lastRoundPoints
-    addLeaderboardEntry({
-      name: playerName,
-      score,
-      avatar: playerAvatar,
-      date: new Date().toISOString(),
-    })
-  }
-
   return (
-    <div className="screen-container title-bg flex flex-col items-center justify-center gap-6 p-8">
-      <Crown size={64} className={isPlayerWin ? 'text-yellow-400' : 'text-gray-400'} />
-      <h2 className="text-4xl font-bold text-white">
-        {isPlayerWin ? '🎉 فوز!' : '😔 خسارة'}
-      </h2>
-      
-      <div className="w-full max-w-sm bg-white/10 rounded-xl p-6 flex flex-col gap-4">
-        <div className="flex justify-between items-center">
-          <span className="text-white/70">الفائز</span>
-          <span className="text-white font-bold">{winnerName}</span>
-        </div>
-        <div className="flex justify-between items-center">
-          <span className="text-white/70">النقاط</span>
-          <span className="text-yellow-400 font-bold">{lastRoundPoints}</span>
-        </div>
-        <div className="flex justify-between items-center">
-          <span className="text-white/70">الحركات</span>
-          <span className="text-white font-bold">{movesCount}</span>
-        </div>
-      </div>
+    <div className="screen-container wood-bg">
+      {/* Achievement Toast */}
+      {showToast && newAchievement && (
+        <AchievementToast
+          achievement={newAchievement}
+          onClose={() => setShowToast(false)}
+        />
+      )}
 
-      <div className="flex flex-col gap-3 w-full max-w-sm">
-        <button onClick={handlePlayAgain} className="game-btn game-btn-primary w-full gap-3">
-          <RotateCcw size={24} /> لعب مرة أخرى
-        </button>
-        <button onClick={handleStatistics} className="game-btn game-btn-secondary w-full gap-3">
-          <BarChart3 size={24} /> الإحصائيات
-        </button>
-        <button onClick={handleMenu} className="game-btn game-btn-secondary w-full gap-3">
-          <Home size={24} /> القائمة الرئيسية
-        </button>
+      <div className="flex flex-col items-center gap-6 w-full max-w-sm">
+        <div className={`p-6 rounded-full ${isPlayerWin ? 'bg-yellow-500/20' : 'bg-red-500/20'}`}>
+          <Trophy size={64} className={isPlayerWin ? 'text-yellow-400' : 'text-red-400'} />
+        </div>
+
+        <div className="text-center">
+          <h2 className="text-3xl font-bold text-white mb-2">
+            {isPlayerWin ? 'فوز! 🎉' : 'خسارة 😔'}
+          </h2>
+          <p className="text-white/70">
+            {isPlayerWin ? `مبروك ${winner}!` : `الفائز: ${winner}`}
+          </p>
+        </div>
+
+        <div className="w-full bg-white/10 rounded-xl p-6 space-y-4">
+          <div className="flex justify-between items-center">
+            <span className="text-white/60">النقاط المكتسبة</span>
+            <span className="text-2xl font-bold text-yellow-400">{points}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-white/60">عدد الحركات</span>
+            <span className="text-xl font-bold text-white">{moves}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-white/60">إجمالي الألعاب</span>
+            <span className="text-xl font-bold text-white">{statistics.gamesPlayed}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-white/60">الإنجازات</span>
+            <span className="text-xl font-bold text-yellow-400">
+              {achievements.filter(a => a.unlockedAt).length}/{achievements.length}
+            </span>
+          </div>
+        </div>
+
+        {/* Show newly unlocked achievements */}
+        {achievements.filter(a => {
+          const unlocked = a.unlockedAt
+          if (!unlocked) return false
+          // Show if unlocked in the last minute
+          const unlockTime = new Date(unlocked).getTime()
+          return Date.now() - unlockTime < 60000
+        }).length > 0 && (
+          <div className="w-full bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Award size={20} className="text-yellow-400" />
+              <span className="text-yellow-400 font-bold">إنجازات جديدة!</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {achievements.filter(a => {
+                const unlocked = a.unlockedAt
+                if (!unlocked) return false
+                const unlockTime = new Date(unlocked).getTime()
+                return Date.now() - unlockTime < 60000
+              }).map(a => (
+                <div key={a.id} className="flex items-center gap-1 bg-white/10 rounded-lg px-2 py-1">
+                  <Star size={14} className="text-yellow-400" />
+                  <span className="text-white text-xs">{a.title}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3 w-full">
+          <button onClick={handlePlayAgain} className="game-btn game-btn-primary w-full gap-3">
+            <RotateCcw size={24} /> لعب مرة أخرى
+          </button>
+          <button onClick={handleMainMenu} className="game-btn game-btn-secondary w-full gap-3">
+            <Home size={24} /> القائمة الرئيسية
+          </button>
+        </div>
       </div>
     </div>
   )
