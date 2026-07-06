@@ -1,0 +1,69 @@
+name: Recreate Android & Build APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  recreate-and-build:
+    name: Recreate Android and Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build web
+        run: npm run build
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Capacitor CLI
+        run: npm install -g @capacitor/cli
+
+      # ✅ Delete and recreate android
+      - name: Delete old Android
+        run: rm -rf android
+
+      - name: Add fresh Android
+        run: npx cap add android
+
+      - name: Sync Android
+        run: npx cap sync android
+
+      # ✅ Commit the new android folder
+      - name: Commit new Android
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add android/
+          git commit -m "fix: recreate android with Gradle 8 compatible config" || echo "No changes"
+          git push origin main || echo "Push failed"
+
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: domino-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
