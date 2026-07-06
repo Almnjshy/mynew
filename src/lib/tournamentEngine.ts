@@ -4,7 +4,7 @@ import type {
   TournamentMatch,
   TournamentRound,
   TournamentState,
-} from '@/types/tournament'
+} from '@/types/game'
 
 /**
  * Generate a unique tournament ID
@@ -124,30 +124,63 @@ function getRoundName(round: number, size: TournamentSize): string {
 }
 
 /**
- * Simulate AI vs AI match
+ * Simulate AI vs AI match - FIXED with proper skill weighting
  */
 export function simulateAIMatch(
   player1: TournamentPlayer,
   player2: TournamentPlayer,
   difficulty: 'easy' | 'medium' | 'hard',
 ): { winner: TournamentPlayer; p1Score: number; p2Score: number } {
-  // Simple simulation based on difficulty
-  const p1Skill = player1.aiDifficulty === 'hard' ? 0.7 : player1.aiDifficulty === 'medium' ? 0.5 : 0.3
-  const p2Skill = player2.aiDifficulty === 'hard' ? 0.7 : player2.aiDifficulty === 'medium' ? 0.5 : 0.3
+  // FIXED: Better skill calculation with weighted randomness
+  const skillMap = { easy: 0.3, medium: 0.5, hard: 0.7 }
+  const p1Skill = skillMap[player1.aiDifficulty || 'medium']
+  const p2Skill = skillMap[player2.aiDifficulty || 'medium']
 
-  // Add randomness
-  const p1Roll = Math.random() * p1Skill
-  const p2Roll = Math.random() * p2Skill
+  // Weighted random: skill determines probability of winning
+  // Higher skill = higher chance to win, but not guaranteed
+  const p1Advantage = p1Skill - p2Skill
+  const p1WinChance = 0.5 + p1Advantage * 0.4 // Range: 0.1 to 0.9
+  
+  const roll = Math.random()
+  const winner = roll < p1WinChance ? player1 : player2
 
-  const winner = p1Roll > p2Roll ? player1 : player2
-  const p1Score = Math.floor(Math.random() * 100) + 50
-  const p2Score = Math.floor(Math.random() * 100) + 50
+  // FIXED: Scores based on skill difference
+  const baseScore = 100
+  const p1Score = Math.floor(baseScore + (p1Skill - 0.5) * 50 + Math.random() * 30)
+  const p2Score = Math.floor(baseScore + (p2Skill - 0.5) * 50 + Math.random() * 30)
 
   return { winner, p1Score, p2Score }
 }
 
 /**
- * Advance tournament to next match
+ * Set match result and advance - NEW FUNCTION
+ */
+export function setMatchResult(
+  state: TournamentState,
+  matchId: string,
+  winnerId: string,
+  p1Score: number,
+  p2Score: number,
+): TournamentState {
+  const newState = { ...state }
+  
+  // Find the match
+  for (const round of newState.rounds) {
+    const match = round.matches.find(m => m.id === matchId)
+    if (match) {
+      match.winner = match.player1?.id === winnerId ? match.player1 : match.player2
+      match.player1Score = p1Score
+      match.player2Score = p2Score
+      match.status = 'completed'
+      break
+    }
+  }
+  
+  return newState
+}
+
+/**
+ * Advance tournament to next match - FIXED
  */
 export function advanceTournament(state: TournamentState): TournamentState {
   const newState = { ...state }
@@ -163,6 +196,11 @@ export function advanceTournament(state: TournamentState): TournamentState {
   if (currentMatch.status === 'bye') {
     currentMatch.winner = currentMatch.player1?.name !== '---' ? currentMatch.player1 : currentMatch.player2
     currentMatch.status = 'completed'
+  }
+
+  // Check if current match is completed before advancing
+  if (currentMatch.status !== 'completed' && currentMatch.status !== 'bye') {
+    return newState // Don't advance if match not done
   }
 
   // Move to next match
@@ -200,7 +238,7 @@ export function advanceTournament(state: TournamentState): TournamentState {
 
       newState.rounds.push({
         roundNumber: newState.currentRound,
-        roundName: getRoundName(newState.currentRound + 1, newState.size),
+        roundName: getRoundName(newState.currentRound, newState.size),
         matches: nextMatches,
       })
     }
@@ -237,4 +275,13 @@ export function isPlayerMatch(state: TournamentState): boolean {
   if (!currentMatch) return false
 
   return currentMatch.player1?.id === 'player_0' || currentMatch.player2?.id === 'player_0'
+}
+
+/**
+ * Get current match info - NEW HELPER
+ */
+export function getCurrentMatch(state: TournamentState): TournamentMatch | null {
+  const currentRound = state.rounds[state.currentRound]
+  if (!currentRound) return null
+  return currentRound.matches[state.currentMatch] || null
 }
