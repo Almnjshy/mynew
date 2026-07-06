@@ -93,10 +93,10 @@ export interface MatchState {
 // Each tile on the board has a position and rotation
 // ============================================================
 export interface BoardTile extends DominoTile {
-  // Grid position (row, col) in the snake layout
-  row: number
-  col: number
-  // Rotation: 0 = vertical, 90 = horizontal, 180 = vertical flipped, 270 = horizontal flipped
+  // Position (x, y) in pixels for chain layout
+  x: number
+  y: number
+  // Rotation: 0 = vertical, 90 = horizontal right, 180 = vertical flipped, 270 = horizontal left
   rotation: number
   // Which end of the domino chain this tile connects to
   isLeft: boolean
