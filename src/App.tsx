@@ -3,6 +3,7 @@ import './App.css'
 import { useGameStore } from './store/gameStore'
 import { useAndroidBackButton } from './hooks/useAndroidBackButton'
 import ErrorBoundary from './components/ErrorBoundary'
+import ExitConfirmation from './components/ExitConfirmation'
 import ScreenTransition from './components/ScreenTransition'
 import TitleScreen from './screens/TitleScreen'
 import MainMenu from './screens/MainMenu'
@@ -71,6 +72,7 @@ function App() {
           {renderScreen()}
         </ScreenTransition>
       </div>
+      <ExitConfirmation />
     </ErrorBoundary>
   )
 }
