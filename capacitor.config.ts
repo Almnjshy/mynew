@@ -1,4 +1,4 @@
-import { CapacitorConfig } from '@capacitor/cli'
+import { CapacitorConfig } from '@capacitor/core'
 
 const config: CapacitorConfig = {
   appId: 'com.almnjshy.domino',
