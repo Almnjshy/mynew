@@ -1,4 +1,4 @@
-import { Achievement, AchievementId, AchievementProgress } from '@/types/achievements'
+import { Achievement, AchievementId, AchievementProgress } from '@/types/game'
 
 export const DEFAULT_ACHIEVEMENTS: Achievement[] = [
   {
@@ -95,6 +95,7 @@ export const DEFAULT_ACHIEVEMENTS: Achievement[] = [
     description: 'اربح بعد أن كنت متأخراً بـ 50 نقطة',
     icon: '🔄',
     condition: { type: 'comeback', value: 1 },
+    unlockedAt: null,
     progress: 0,
     maxProgress: 1,
     rarity: 'epic',
@@ -111,6 +112,36 @@ export const DEFAULT_ACHIEVEMENTS: Achievement[] = [
     rarity: 'rare',
   },
 ]
+
+export const getRarityColor = (rarity: string): string => {
+  const colors: Record<string, string> = {
+    common: '#9ca3af',
+    rare: '#3b82f6',
+    epic: '#a855f7',
+    legendary: '#eab308',
+  }
+  return colors[rarity] || '#9ca3af'
+}
+
+export const getRarityBorder = (rarity: string): string => {
+  const borders: Record<string, string> = {
+    common: 'border-gray-500',
+    rare: 'border-blue-500',
+    epic: 'border-purple-500',
+    legendary: 'border-yellow-500',
+  }
+  return borders[rarity] || 'border-gray-500'
+}
+
+export const getRarityLabel = (rarity: string): string => {
+  const labels: Record<string, string> = {
+    common: 'شائع',
+    rare: 'نادر',
+    epic: 'ملحمي',
+    legendary: 'أسطوري',
+  }
+  return labels[rarity] || rarity
+}
 
 export const checkAchievements = (
   achievements: Achievement[],
@@ -142,9 +173,7 @@ export const checkAchievements = (
         newProgress = Math.min(progress.crushingWins, ach.maxProgress)
         break
       case 'moves':
-        if (progress.fastestWinMoves > 0 && progress.fastestWinMoves <= ach.condition.value) {
-          newProgress = ach.maxProgress
-        }
+        newProgress = progress.fastestWinMoves > 0 && progress.fastestWinMoves <= ach.condition.value ? 1 : 0
         break
       case 'draws':
         newProgress = Math.min(progress.totalDraws, ach.maxProgress)
@@ -154,45 +183,13 @@ export const checkAchievements = (
         break
     }
 
-    if (newProgress !== ach.progress) {
-      updated[i] = { ...ach, progress: newProgress }
-    }
-
     if (newProgress >= ach.maxProgress && !ach.unlockedAt) {
-      updated[i] = { ...updated[i], unlockedAt: new Date().toISOString() }
-      newlyUnlocked.push(ach.id)
+      updated[i] = { ...ach, progress: newProgress, unlockedAt: new Date().toISOString() }
+      newlyUnlocked.push(ach.id as AchievementId)
+    } else {
+      updated[i] = { ...ach, progress: newProgress }
     }
   }
 
   return { updated, newlyUnlocked }
-}
-
-export const getRarityColor = (rarity: Achievement['rarity']): string => {
-  switch (rarity) {
-    case 'common': return 'bg-gray-500'
-    case 'rare': return 'bg-blue-500'
-    case 'epic': return 'bg-purple-500'
-    case 'legendary': return 'bg-yellow-500'
-    default: return 'bg-gray-500'
-  }
-}
-
-export const getRarityBorder = (rarity: Achievement['rarity']): string => {
-  switch (rarity) {
-    case 'common': return 'border-gray-400'
-    case 'rare': return 'border-blue-400'
-    case 'epic': return 'border-purple-400'
-    case 'legendary': return 'border-yellow-400'
-    default: return 'border-gray-400'
-  }
-}
-
-export const getRarityLabel = (rarity: Achievement['rarity']): string => {
-  switch (rarity) {
-    case 'common': return 'شائع'
-    case 'rare': return 'نادر'
-    case 'epic': return 'ملحمي'
-    case 'legendary': return 'أسطوري'
-    default: return ''
-  }
 }
