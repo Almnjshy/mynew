@@ -127,12 +127,12 @@ export const useGameStore = create<GameStore>()(
       updateStatistics: (stats) =>
         set((state) => {
           const current = state.statistics
-          
+
           // Calculate new win streak
           const newWinStreak = stats.gamesWon 
             ? current.winStreak + stats.gamesWon 
             : (stats.gamesLost ? 0 : current.winStreak)
-          
+
           const updated: Statistics = {
             gamesPlayed: current.gamesPlayed + (stats.gamesPlayed || 0),
             gamesWon: current.gamesWon + (stats.gamesWon || 0),
