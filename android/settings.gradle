@@ -16,4 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "domino"
 include ':app'
-include ':wifip2p'
+// include ':wifip2p'
