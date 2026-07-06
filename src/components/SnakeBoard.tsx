@@ -1,8 +1,12 @@
 import { BoardTile } from '@/types/game'
+import { useMemo } from 'react'
 
 interface Props {
   board: BoardTile[]
 }
+
+const TILE_W = 40
+const TILE_H = 80
 
 export default function SnakeBoard({ board }: Props) {
   if (board.length === 0) {
@@ -13,39 +17,47 @@ export default function SnakeBoard({ board }: Props) {
     )
   }
 
-  // Find bounds for centering
-  const xs = board.map(t => t.x)
-  const ys = board.map(t => t.y)
-  const minX = Math.min(...xs)
-  const maxX = Math.max(...xs)
-  const minY = Math.min(...ys)
-  const maxY = Math.max(...ys)
-
-  const centerX = (minX + maxX) / 2
-  const centerY = (minY + maxY) / 2
+  // Calculate centering offset dynamically
+  // This ensures the board is always centered regardless of how many tiles are added
+  const offset = useMemo(() => {
+    const xs = board.map(t => t.x)
+    const ys = board.map(t => t.y)
+    const minX = Math.min(...xs)
+    const maxX = Math.max(...xs)
+    const minY = Math.min(...ys)
+    const maxY = Math.max(...ys)
+    return {
+      x: -(minX + maxX) / 2,
+      y: -(minY + maxY) / 2,
+    }
+  }, [board])
 
   return (
     <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
-      <div className="relative">
+      <div 
+        className="relative"
+        style={{
+          transform: `translate(${offset.x}px, ${offset.y}px)`,
+          transition: 'transform 0.3s ease-out',
+        }}
+      >
         {board.map((tile) => {
-          // Calculate display dimensions based on rotation
-          // 0° or 180° = vertical (portrait): width=40, height=80
-          // 90° or 270° = horizontal (landscape): width=80, height=40
           const isVertical = tile.rotation === 0 || tile.rotation === 180
-          const width = isVertical ? 40 : 80
-          const height = isVertical ? 80 : 40
+          const width = isVertical ? TILE_W : TILE_H
+          const height = isVertical ? TILE_H : TILE_W
 
           return (
             <div
               key={tile.id}
               className="absolute"
               style={{
-                left: tile.x - centerX + 200,
-                top: tile.y - centerY + 150,
+                left: tile.x,
+                top: tile.y,
                 width: width,
                 height: height,
                 transform: `rotate(${tile.rotation}deg)`,
                 transformOrigin: 'center center',
+                transition: 'all 0.2s ease-out',
               }}
             >
               <div className="w-full h-full bg-[#f5f0e6] border border-[#8b7355] rounded-md flex flex-col overflow-hidden shadow-md">
