@@ -4,7 +4,7 @@ import type {
   TournamentMatch,
   TournamentRound,
   TournamentState,
-} from '@/types/game'
+} from '@/types/tournament'
 
 /**
  * Generate a unique tournament ID
@@ -140,7 +140,7 @@ export function simulateAIMatch(
   // Higher skill = higher chance to win, but not guaranteed
   const p1Advantage = p1Skill - p2Skill
   const p1WinChance = 0.5 + p1Advantage * 0.4 // Range: 0.1 to 0.9
-  
+
   const roll = Math.random()
   const winner = roll < p1WinChance ? player1 : player2
 
@@ -163,7 +163,7 @@ export function setMatchResult(
   p2Score: number,
 ): TournamentState {
   const newState = { ...state }
-  
+
   // Find the match
   for (const round of newState.rounds) {
     const match = round.matches.find(m => m.id === matchId)
@@ -175,7 +175,7 @@ export function setMatchResult(
       break
     }
   }
-  
+
   return newState
 }
 
