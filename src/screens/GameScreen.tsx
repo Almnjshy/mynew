@@ -6,18 +6,19 @@ import {
   getBoardEnds
 } from '@/lib/gameEngine'
 import { getBestMove, getHintMessage, shouldDraw } from '@/lib/hintEngine'
-import { GameState, DominoTile, TileEnd, TIMER_CONFIG, BoardTile } from '@/types/game'
+import { GameState, DominoTile, TileEnd, TIMER_CONFIG, BoardTile, GameRecord } from '@/types/game'
 import { ArrowLeft, RotateCcw, Trophy, Lightbulb, Users, User } from 'lucide-react'
 import TimerBar from '@/components/TimerBar'
 import SnakeBoard from '@/components/SnakeBoard'
 import DominoTileComponent from '@/components/DominoTile'
+import ExitConfirmation from '@/components/ExitConfirmation'
 import { soundEngine } from '@/lib/soundEngine'
 
 export default function GameScreen() {
   const { 
     setScreen, settings, updateStatistics, checkAndUnlockAchievements,
     playerName, playerAvatar, matchState, addRoundScore, initMatchState,
-    statistics
+    statistics, addHistoryEntry
   } = useGameStore()
 
   const [gameState, setGameState] = useState<GameState | null>(null)
@@ -28,10 +29,12 @@ export default function GameScreen() {
   const [hintMessage, setHintMessage] = useState('')
   const [bestMove, setBestMove] = useState<{ tileIndex: number; end: TileEnd } | null>(null)
   const [timerKey, setTimerKey] = useState(0)
+  const [showExitConfirm, setShowExitConfirm] = useState(false)
 
   const moveCountRef = useRef(0)
   const playerDrawCountRef = useRef(0)
   const playerHasDrawnRef = useRef(false)
+  const gameStartTimeRef = useRef<number>(Date.now())
 
   const getTimeLimit = useCallback(() => {
     if (settings.timerMode === 'off') return 0
@@ -63,6 +66,7 @@ export default function GameScreen() {
     moveCountRef.current = 0
     playerDrawCountRef.current = 0
     playerHasDrawnRef.current = false
+    gameStartTimeRef.current = Date.now()
     setRoundEnded(false)
     setHintMessage('')
     setBestMove(null)
@@ -177,6 +181,8 @@ export default function GameScreen() {
   }
 
   const handleRoundEnd = (playerWon: boolean) => {
+    if (roundEnded) return // Prevent double calls
+
     const isWin = playerWon
     const playerScore = calculateScore(gameState?.players[0]?.hand || [])
     const opponentScores = gameState?.players.slice(1).map(p => calculateScore(p.hand)) || []
@@ -186,20 +192,43 @@ export default function GameScreen() {
       ? gameState?.players[0].score || 0
       : (isWin ? totalOpponentScore : playerScore)
 
+    // FIXED: Calculate duration
+    const duration = Math.floor((Date.now() - gameStartTimeRef.current) / 1000)
+
     sessionStorage.setItem('lastWinner', isWin ? playerName : 'الكمبيوتر')
     sessionStorage.setItem('lastRoundPoints', String(finalPlayerScore))
     sessionStorage.setItem('movesCount', String(moveCountRef.current))
+    sessionStorage.setItem('gameDuration', String(duration))
 
-    // Update statistics
+    // FIXED: Add history entry
+    const historyEntry: GameRecord = {
+      id: `game_${Date.now()}`,
+      date: new Date().toISOString(),
+      playerName,
+      opponentName: gameState?.players[1]?.name || 'الكمبيوتر',
+      result: isWin ? 'win' : 'loss',
+      gameMode: settings.gameMode,
+      difficulty: settings.difficulty,
+      rounds: gameState?.round || 1,
+      playerScore: finalPlayerScore,
+      opponentScore: isWin ? 0 : totalOpponentScore,
+      targetScore: settings.targetScore,
+      duration,
+    }
+    addHistoryEntry(historyEntry)
+
+    // Update statistics - FIXED with duration
     updateStatistics({
       gamesPlayed: 1,
       gamesWon: isWin ? 1 : 0,
       gamesLost: isWin ? 0 : 1,
       totalScore: finalPlayerScore,
       highestScore: finalPlayerScore,
+      totalTime: duration,
+      bestTime: isWin ? duration : undefined,
     })
 
-    // Check achievements
+    // Check achievements - FIXED: correct fastestWinMoves
     const newlyUnlocked = checkAndUnlockAchievements({
       totalGames: statistics.gamesPlayed + 1,
       totalWins: statistics.gamesWon + (isWin ? 1 : 0),
@@ -207,7 +236,7 @@ export default function GameScreen() {
       bestStreak: Math.max(statistics.bestWinStreak, isWin ? statistics.winStreak + 1 : 0),
       cleanWins: statistics.gamesWon + (isWin && !playerHasDrawnRef.current ? 1 : 0),
       crushingWins: statistics.gamesWon + (isWin && totalOpponentScore === 0 ? 1 : 0),
-      fastestWinMoves: isWin ? moveCountRef.current : statistics.bestTime,
+      fastestWinMoves: isWin ? moveCountRef.current : 0,
       totalDraws: playerDrawCountRef.current,
       comebacks: 0,
     })
@@ -216,6 +245,7 @@ export default function GameScreen() {
       sessionStorage.setItem('newAchievements', JSON.stringify(newlyUnlocked))
     }
 
+    setRoundEnded(true)
     setTimeout(() => setScreen('matchEnd'), 2000)
   }
 
@@ -294,8 +324,14 @@ export default function GameScreen() {
     setTimerKey(prev => prev + 1)
   }
 
+  // FIXED: Exit with confirmation
   const handleExit = () => {
     soundEngine.playClick()
+    setShowExitConfirm(true)
+  }
+
+  const confirmExit = () => {
+    setShowExitConfirm(false)
     setScreen('menu')
   }
 
@@ -314,162 +350,107 @@ export default function GameScreen() {
 
   return (
     <div className="screen-container table-bg">
+      {/* Exit Confirmation Modal */}
+      {showExitConfirm && (
+        <ExitConfirmation 
+          onConfirm={confirmExit} 
+          onCancel={() => setShowExitConfirm(false)} 
+        />
+      )}
+
       {/* Header */}
       <div className="w-full flex items-center justify-between px-4 py-2">
         <button onClick={handleExit} className="text-white/60 p-2">
           <ArrowLeft size={24} />
         </button>
-        <div className="text-center">
-          <div className="text-yellow-400 font-bold text-sm">
-            {settings.gameMode === 'classic' ? 'كلاسيك' : 
-             settings.gameMode === 'points' ? 'نقاط' :
-             settings.gameMode === 'block' ? 'حظر' :
-             settings.gameMode === 'allFives' ? 'الخمسات' : 'سحب'}
-          </div>
-          <div className="text-white/40 text-xs">
-            {gameState.players.length} لاعبين
-          </div>
+        <div className="flex items-center gap-2">
+          {settings.showHints && bestMove && (
+            <button onClick={() => handlePlayTile(bestMove.end)} className="text-yellow-400 p-1">
+              <Lightbulb size={20} />
+            </button>
+          )}
+          <div className="text-white/80 text-sm">{currentPlayer?.name}</div>
+          {aiThinking && <div className="text-white/60 text-xs animate-pulse">يفكر...</div>}
         </div>
-        <button onClick={() => {}} className="text-white/60 p-2">
-          <RotateCcw size={24} />
-        </button>
+        <div className="w-8" />
       </div>
 
       {/* Timer */}
       {timeLimit > 0 && isPlayerTurn && (
-        <div className="w-full px-4 mb-1">
-          <TimerBar 
-            key={timerKey}
-            duration={timeLimit} 
-            onTimeUp={handleTimeUp} 
-            isActive={isPlayerTurn} 
-          />
-        </div>
+        <TimerBar key={timerKey} duration={timeLimit} onTimeUp={handleTimeUp} />
       )}
-
-      {/* Opponents Info */}
-      <div className="w-full px-4 py-1">
-        <div className="flex items-center justify-center gap-3 flex-wrap">
-          {gameState.players.slice(1).map((opponent, idx) => (
-            <div 
-              key={opponent.id}
-              className={`flex items-center gap-2 px-3 py-1 rounded-full ${
-                gameState.currentPlayerIndex === idx + 1 
-                  ? 'bg-yellow-500/20 border border-yellow-500/50' 
-                  : 'bg-white/5'
-              }`}
-            >
-              <div className="w-6 h-6 rounded-full bg-white/10 overflow-hidden">
-                <img src={opponent.avatar} alt="" className="w-full h-full object-cover" />
-              </div>
-              <span className="text-white/70 text-xs">{opponent.name}</span>
-              <span className="text-white/40 text-xs">({opponent.hand.length})</span>
-              {gameState.currentPlayerIndex === idx + 1 && aiThinking && (
-                <span className="text-yellow-400 text-xs animate-pulse">يفكر...</span>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Snake Board */}
-      <div className="flex-1 flex items-center justify-center px-2 py-2 overflow-hidden">
-        <SnakeBoard board={gameState.board} />
-      </div>
 
       {/* Message */}
       {message && (
-        <div className="text-center px-4 py-1 text-sm font-medium text-yellow-400">
+        <div className="text-white/90 text-center text-sm py-1 px-4 bg-black/30 rounded-lg mx-4">
           {message}
         </div>
       )}
 
-      {/* Hints */}
-      {hintMessage && settings.showHints && isPlayerTurn && (
-        <div className="text-center px-4 py-1">
-          <span className="text-white/50 text-xs flex items-center justify-center gap-1">
-            <Lightbulb size={12} />
-            {hintMessage}
-          </span>
+      {/* Hint */}
+      {hintMessage && (
+        <div className="text-yellow-400/80 text-center text-xs py-1">
+          {hintMessage}
         </div>
       )}
 
-      {/* Player Info */}
-      <div className="flex items-center gap-3 px-4 py-2">
-        <div className="w-10 h-10 rounded-full bg-yellow-500/20 overflow-hidden border-2 border-yellow-500">
-          <img src={player.avatar} alt="" className="w-full h-full object-cover" />
-        </div>
-        <div className="text-right">
-          <div className="text-yellow-400 font-medium text-sm">{player.name}</div>
-          <div className="text-white/40 text-xs">{player.hand.length} قطعة</div>
-        </div>
-        {settings.gameMode === 'allFives' && (
-          <div className="mr-auto text-yellow-400 font-bold">
-            {player.score} نقطة
-          </div>
-        )}
+      {/* Board */}
+      <div className="flex-1 flex items-center justify-center w-full overflow-hidden px-2">
+        <SnakeBoard board={gameState.board} />
       </div>
 
       {/* Player Hand */}
-      <div className="w-full px-4 pb-2">
-        <div className="player-hand justify-center">
+      <div className="w-full px-4 pb-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-white/60 text-xs">{player.name}</div>
+          <div className="flex gap-2">
+            {gameState.stock.length > 0 && settings.gameMode !== 'block' && (
+              <button onClick={handleDraw} className="game-btn game-btn-secondary text-xs px-3 py-1">
+                سحب
+              </button>
+            )}
+            <button onClick={handleSkip} className="game-btn game-btn-secondary text-xs px-3 py-1">
+              تخطي
+            </button>
+          </div>
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-2 justify-center">
           {player.hand.map((tile, index) => {
             const validEnds = getValidEnds(tile, gameState.board)
             const isSelected = selectedTile === index
-            const isHinted = bestMove?.tileIndex === index
+            const canPlay = validEnds.length > 0 && isPlayerTurn
 
             return (
-              <div key={tile.id} className="relative">
-                <button
+              <div key={tile.id} className="flex flex-col items-center gap-1">
+                <DominoTileComponent
+                  tile={tile}
+                  selected={isSelected}
+                  disabled={!canPlay}
                   onClick={() => handleTileClick(index)}
-                  disabled={!isPlayerTurn || roundEnded}
-                  className={`transition-transform ${
-                    isSelected ? 'scale-110 -translate-y-2' : ''
-                  } ${!isPlayerTurn || roundEnded ? 'opacity-50' : ''}`}
-                >
-                  <DominoTileComponent 
-                    tile={tile} 
-                    selected={isSelected}
-                    highlight={isHinted}
-                    size={player.hand.length > 10 ? 'sm' : player.hand.length > 7 ? 'md' : 'lg'}
-                  />
-                </button>
-
-                {isSelected && validEnds.length > 0 && (
-                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 flex gap-1">
-                    {validEnds.map((end) => (
-                      <button
-                        key={end}
-                        onClick={() => handlePlayTile(end)}
-                        className="bg-yellow-500 text-black text-xs px-2 py-1 rounded-full font-bold"
-                      >
-                        {end === 'left' ? '←' : '→'}
+                />
+                {isSelected && canPlay && validEnds.length > 1 && (
+                  <div className="flex gap-1">
+                    {validEnds.includes('left') && (
+                      <button onClick={() => handlePlayTile('left')} className="text-xs bg-yellow-500/80 text-black px-2 py-0.5 rounded">
+                        يسار
                       </button>
-                    ))}
+                    )}
+                    {validEnds.includes('right') && (
+                      <button onClick={() => handlePlayTile('right')} className="text-xs bg-yellow-500/80 text-black px-2 py-0.5 rounded">
+                        يمين
+                      </button>
+                    )}
                   </div>
+                )}
+                {isSelected && canPlay && validEnds.length === 1 && (
+                  <button onClick={() => handlePlayTile(validEnds[0])} className="text-xs bg-yellow-500/80 text-black px-2 py-0.5 rounded">
+                    لعب
+                  </button>
                 )}
               </div>
             )
           })}
         </div>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="flex gap-2 px-4 pb-4">
-        <button
-          onClick={handleDraw}
-          disabled={!isPlayerTurn || roundEnded || gameState.stock.length === 0}
-          className="game-btn game-btn-secondary flex-1 text-sm"
-        >
-          سحب ({gameState.stock.length})
-        </button>
-        <button
-          onClick={handleSkip}
-          disabled={!isPlayerTurn || roundEnded}
-          className="game-btn game-btn-secondary flex-1 text-sm"
-        >
-          تخطي
-        </button>
       </div>
     </div>
   )
