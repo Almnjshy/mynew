@@ -1,6 +1,18 @@
 import { useGameStore } from '@/store/gameStore'
 import { ArrowLeft, Trophy, Gamepad2, Swords, Target, Medal, History } from 'lucide-react'
 
+function StatRow({ icon, label, value, color = 'text-white' }: { icon: React.ReactNode; label: string; value: string | number; color?: string }) {
+  return (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <div className="text-yellow-500">{icon}</div>
+        <span className="text-white/80">{label}</span>
+      </div>
+      <span className={`font-bold text-lg ${color}`}>{value}</span>
+    </div>
+  )
+}
+
 export default function StatisticsScreen() {
   const { statistics, setScreen } = useGameStore()
   const winRate = statistics.gamesPlayed > 0 ? Math.round((statistics.gamesWon / statistics.gamesPlayed) * 100) : 0
@@ -20,10 +32,9 @@ export default function StatisticsScreen() {
           <StatRow icon={<Swords size={24} />} label="الخسارة" value={statistics.gamesLost} color="text-red-400" />
           <StatRow icon={<Target size={24} />} label="نسبة الفوز" value={`${winRate}%`} color="text-yellow-400" />
           <StatRow icon={<Trophy size={24} />} label="أعلى نتيجة" value={statistics.highestScore} color="text-yellow-400" />
-          <StatRow icon={<Target size={24} />} label="السلسلة" value={statistics.streak} />
+          <StatRow icon={<Target size={24} />} label="السلسلة" value={statistics.winStreak} />
         </div>
 
-        {/* Links */}
         <button 
           onClick={() => setScreen('achievements')}
           className="game-btn game-btn-primary w-full gap-3"
@@ -38,18 +49,6 @@ export default function StatisticsScreen() {
           <History size={24} /> السجل
         </button>
       </div>
-    </div>
-  )
-}
-
-function StatRow({ icon, label, value, color = 'text-white' }: { icon: React.ReactNode, label: string, value: string | number, color?: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-3 text-white/80">
-        <span className="gold-accent">{icon}</span>
-        <span>{label}</span>
-      </div>
-      <span className={`font-bold text-xl ${color}`}>{value}</span>
     </div>
   )
 }
