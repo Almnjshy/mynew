@@ -1,87 +1,40 @@
 import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
+import { persist } from 'zustand/middleware'
+import type {
+  GameSettings,
+  Statistics,
+  Achievement,
+  HistoryEntry,
+  LeaderboardEntry,
+  MatchState,
+  Screen,
+  GameRecord,
+} from '@/types/game'
+import { DEFAULT_ACHIEVEMENTS } from '@/lib/achievements'
 
-// Simple localStorage adapter (no external dependencies)
-const localStorageAdapter = {
-  getItem: async (name: string): Promise<string | null> => {
-    return localStorage.getItem(name)
-  },
-  setItem: async (name: string, value: string): Promise<void> => {
-    localStorage.setItem(name, value)
-  },
-  removeItem: async (name: string): Promise<void> => {
-    localStorage.removeItem(name)
-  },
+const defaultSettings: GameSettings = {
+  soundEnabled: true,
+  musicEnabled: true,
+  difficulty: 'medium',
+  showHints: false,
+  gameMode: 'classic',
+  targetScore: 100,
+  timerMode: 'off',
+  customTime: 60,
+  aiCount: 1,
 }
 
-// Types
-export type Difficulty = 'easy' | 'medium' | 'hard'
-export type GameMode = 'classic' | 'points' | 'block'
-export type TimerMode = 'off' | 'blitz' | 'rapid' | 'custom'
-export type Screen = 
-  | 'title' | 'menu' | 'levelSelect' | 'game' | 'matchEnd'
-  | 'settings' | 'statistics' | 'achievements' | 'history'
-  | 'profile' | 'leaderboard' | 'wifiGame' | 'onlineGame'
-
-export interface GameSettings {
-  soundEnabled: boolean
-  musicEnabled: boolean
-  difficulty: Difficulty
-  showHints: boolean
-  gameMode: GameMode
-  targetScore: number
-  timerMode: TimerMode
-  customTime: number
-  aiCount: number
-}
-
-export interface Statistics {
-  gamesPlayed: number
-  gamesWon: number
-  gamesLost: number
-  totalScore: number
-  highestScore: number
-  totalTime: number
-  bestTime: number
-  draws: number
-  winStreak: number
-  bestWinStreak: number
-}
-
-export interface Achievement {
-  id: string
-  name: string
-  description: string
-  icon: string
-  unlocked: boolean
-  progress: number
-  target: number
-  unlockedAt?: string
-}
-
-export interface HistoryEntry {
-  id: string
-  date: string
-  mode: GameMode
-  difficulty: Difficulty
-  result: 'win' | 'loss' | 'draw'
-  score: number
-  opponentScore: number
-  duration: number
-}
-
-export interface LeaderboardEntry {
-  name: string
-  score: number
-  avatar: string
-  date: string
-}
-
-export interface MatchState {
-  round: number
-  playerScore: number
-  aiScore: number
-  targetScore: number
+const defaultStatistics: Statistics = {
+  gamesPlayed: 0,
+  gamesWon: 0,
+  gamesLost: 0,
+  totalScore: 0,
+  highestScore: 0,
+  totalTime: 0,
+  bestTime: 0,
+  draws: 0,
+  winStreak: 0,
+  bestWinStreak: 0,
 }
 
 export interface GameStore {
@@ -99,8 +52,8 @@ export interface GameStore {
   achievements: Achievement[]
   updateAchievementProgress: (id: string, progress: number) => void
   unlockAchievement: (id: string) => void
-  history: HistoryEntry[]
-  addHistoryEntry: (entry: HistoryEntry) => void
+  gameHistory: GameRecord[]
+  addHistoryEntry: (entry: GameRecord) => void
   clearHistory: () => void
   leaderboard: LeaderboardEntry[]
   addLeaderboardEntry: (entry: LeaderboardEntry) => void
@@ -110,150 +63,51 @@ export interface GameStore {
   resetMatchState: () => void
 }
 
-const defaultSettings: GameSettings = {
-  soundEnabled: true,
-  musicEnabled: true,
-  difficulty: 'medium',
-  showHints: false,
-  gameMode: 'classic',
-  targetScore: 100,
-  timerMode: 'off',
-  customTime: 120,
-  aiCount: 1,
-}
-
-const defaultStatistics: Statistics = {
-  gamesPlayed: 0,
-  gamesWon: 0,
-  gamesLost: 0,
-  totalScore: 0,
-  highestScore: 0,
-  totalTime: 0,
-  bestTime: 0,
-  draws: 0,
-  winStreak: 0,
-  bestWinStreak: 0,
-}
-
-const defaultAchievements: Achievement[] = [
-  {
-    id: 'first_win',
-    name: 'أول فوز',
-    description: 'اربح مبارتك الأولى',
-    icon: 'trophy',
-    unlocked: false,
-    progress: 0,
-    target: 1,
-  },
-  {
-    id: 'win_streak_3',
-    name: 'الفوز المتتالي',
-    description: 'اربح 3 مباريات متتالية',
-    icon: 'zap',
-    unlocked: false,
-    progress: 0,
-    target: 3,
-  },
-  {
-    id: 'score_100',
-    name: 'المائة الذهبية',
-    description: 'اجمع 100 نقطة في مباراة واحدة',
-    icon: 'target',
-    unlocked: false,
-    progress: 0,
-    target: 100,
-  },
-  {
-    id: 'games_10',
-    name: 'المحترف',
-    description: 'العب 10 مباريات',
-    icon: 'gamepad',
-    unlocked: false,
-    progress: 0,
-    target: 10,
-  },
-  {
-    id: 'speed_demon',
-    name: 'السريع',
-    description: 'اربح مباراة في أقل من دقيقتين',
-    icon: 'timer',
-    unlocked: false,
-    progress: 0,
-    target: 1,
-  },
-  {
-    id: 'perfect_game',
-    name: 'اللعبة المثالية',
-    description: 'اربح بدون أن يسجل الخصم أي نقطة',
-    icon: 'crown',
-    unlocked: false,
-    progress: 0,
-    target: 1,
-  },
-]
-
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
       screen: 'title',
       setScreen: (screen) => set({ screen }),
       playerName: 'لاعب',
-      playerAvatar: '/assets/avatar_player.png',
-      setPlayerName: (playerName) => set({ playerName }),
-      setPlayerAvatar: (playerAvatar) => set({ playerAvatar }),
+      playerAvatar: '/assets/avatar_default.png',
+      setPlayerName: (name) => set({ playerName: name }),
+      setPlayerAvatar: (avatar) => set({ playerAvatar: avatar }),
       settings: defaultSettings,
       updateSettings: (newSettings) =>
         set((state) => ({
           settings: { ...state.settings, ...newSettings },
         })),
       statistics: defaultStatistics,
-      updateStatistics: (newStats) =>
+      updateStatistics: (stats) =>
         set((state) => ({
-          statistics: { ...state.statistics, ...newStats },
+          statistics: { ...state.statistics, ...stats },
         })),
       resetStatistics: () => set({ statistics: defaultStatistics }),
-      achievements: defaultAchievements,
+      achievements: DEFAULT_ACHIEVEMENTS,
       updateAchievementProgress: (id, progress) =>
         set((state) => ({
           achievements: state.achievements.map((a) =>
-            a.id === id
-              ? {
-                  ...a,
-                  progress: Math.min(progress, a.target),
-                  unlocked: progress >= a.target && !a.unlocked,
-                  unlockedAt:
-                    progress >= a.target && !a.unlocked
-                      ? new Date().toISOString()
-                      : a.unlockedAt,
-                }
-              : a
+            a.id === id ? { ...a, progress } : a
           ),
         })),
       unlockAchievement: (id) =>
         set((state) => ({
           achievements: state.achievements.map((a) =>
-            a.id === id && !a.unlocked
-              ? {
-                  ...a,
-                  unlocked: true,
-                  progress: a.target,
-                  unlockedAt: new Date().toISOString(),
-                }
-              : a
+            a.id === id ? { ...a, unlockedAt: new Date().toISOString() } : a
           ),
         })),
-      history: [],
+      gameHistory: [],
       addHistoryEntry: (entry) =>
         set((state) => ({
-          history: [entry, ...state.history].slice(0, 50),
+          gameHistory: [entry, ...state.gameHistory].slice(0, 100),
         })),
-      clearHistory: () => set({ history: [] }),
+      clearHistory: () => set({ gameHistory: [] }),
       leaderboard: [],
       addLeaderboardEntry: (entry) =>
         set((state) => ({
           leaderboard: [...state.leaderboard, entry]
             .sort((a, b) => b.score - a.score)
-            .slice(0, 20),
+            .slice(0, 50),
         })),
       matchState: null,
       initMatchState: (targetScore) =>
@@ -263,45 +117,33 @@ export const useGameStore = create<GameStore>()(
             playerScore: 0,
             aiScore: 0,
             targetScore,
+            scores: [],
+            playerTotal: 0,
+            opponentTotal: 0,
           },
         }),
       addRoundScore: (playerScore, aiScore) =>
         set((state) => {
-          if (!state.matchState) return {}
+          if (!state.matchState) return state
+          const newScores = [...state.matchState.scores, { player: playerScore, ai: aiScore }]
+          const playerTotal = newScores.reduce((sum, s) => sum + s.player, 0)
+          const opponentTotal = newScores.reduce((sum, s) => sum + s.ai, 0)
           return {
             matchState: {
               ...state.matchState,
               round: state.matchState.round + 1,
-              playerScore: state.matchState.playerScore + playerScore,
-              aiScore: state.matchState.aiScore + aiScore,
+              playerScore,
+              aiScore,
+              scores: newScores,
+              playerTotal,
+              opponentTotal,
             },
           }
         }),
       resetMatchState: () => set({ matchState: null }),
     }),
     {
-      name: 'domino-game-storage',
-      storage: createJSONStorage(() => localStorageAdapter),
-      partialize: (state) => ({
-        playerName: state.playerName,
-        playerAvatar: state.playerAvatar,
-        settings: state.settings,
-        statistics: state.statistics,
-        achievements: state.achievements,
-        history: state.history,
-        leaderboard: state.leaderboard,
-      }),
-      onRehydrateStorage: () => (state) => {
-        if (state && !state.achievements) {
-          state.achievements = defaultAchievements
-        }
-        if (state && !state.leaderboard) {
-          state.leaderboard = []
-        }
-        if (state && !state.history) {
-          state.history = []
-        }
-      },
+      name: 'domino-storage',
     }
   )
 )
