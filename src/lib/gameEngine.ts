@@ -84,18 +84,20 @@ export const dealTiles = (players: Player[], stock: DominoTile[]): { players: Pl
 }
 
 // ============================================================
-// BOARD ENDS
+// BOARD ENDS - FIXED: Correctly identifies exposed values
 // ============================================================
 export const getBoardEnds = (board: BoardTile[]): { leftValue: number; rightValue: number } => {
   if (board.length === 0) return { leftValue: -1, rightValue: -1 }
 
-  // Left end: exposed value of first tile
+  // Left end: exposed value of first tile (the side NOT connected to the next tile)
+  // For a BoardTile, the side facing OUT is determined by isLeft flag
   const leftTile = board[0]
   const leftValue = leftTile.isLeft ? leftTile.top : leftTile.bottom
 
   // Right end: exposed value of last tile
+  // FIXED: Was using leftTile instead of rightTile
   const rightTile = board[board.length - 1]
-  const rightValue = rightTile.isLeft ? leftTile.bottom : leftTile.top
+  const rightValue = rightTile.isLeft ? rightTile.bottom : rightTile.top
 
   return { leftValue, rightValue }
 }
@@ -127,46 +129,14 @@ interface ChainState {
   x: number
   y: number
   direction: 'right' | 'left' | 'up' | 'down'
-  row: number  // Which row in snake (0, 1, 2...)
+  row: number
 }
 
 function getInitialChainState(): ChainState {
   return { x: 0, y: 0, direction: 'right', row: 0 }
 }
 
-function getNextPosition(state: ChainState, isDouble: boolean): { x: number; y: number; newState: ChainState } {
-  const tileLength = isDouble ? TILE_W : TILE_H
-
-  let newX = state.x
-  let newY = state.y
-  let newDirection = state.direction
-  let newRow = state.row
-
-  // Move in current direction
-  switch (state.direction) {
-    case 'right':
-      newX += tileLength + CHAIN_GAP
-      break
-    case 'left':
-      newX -= tileLength + CHAIN_GAP
-      break
-    case 'down':
-      newY += TILE_H + CHAIN_GAP
-      break
-    case 'up':
-      newY -= TILE_H + CHAIN_GAP
-      break
-  }
-
-  return {
-    x: newX,
-    y: newY,
-    newState: { x: newX, y: newY, direction: newDirection, row: newRow }
-  }
-}
-
 function shouldTurn(state: ChainState, screenWidth: number = 800): boolean {
-  // Turn when we reach screen edge
   const margin = TILE_H * 3
   if (state.direction === 'right' && state.x + TILE_H > screenWidth - margin) return true
   if (state.direction === 'left' && state.x - TILE_H < margin) return true
@@ -174,71 +144,71 @@ function shouldTurn(state: ChainState, screenWidth: number = 800): boolean {
 }
 
 function turnDirection(state: ChainState): ChainState {
-  // Snake pattern: right -> down -> left -> down -> right...
   const newRow = state.row + 1
-
   if (state.direction === 'right') {
     return { x: state.x, y: state.y + TILE_H, direction: 'down', row: newRow }
   } else if (state.direction === 'down') {
     if (state.row % 2 === 1) {
-      // After odd row, go right
       return { x: state.x, y: state.y, direction: 'right', row: newRow }
     } else {
-      // After even row, go left
       return { x: state.x, y: state.y, direction: 'left', row: newRow }
     }
   } else if (state.direction === 'left') {
     return { x: state.x, y: state.y + TILE_H, direction: 'down', row: newRow }
   }
-
   return state
 }
 
 // Calculate rotation for a tile
 function calculateRotation(direction: 'right' | 'left' | 'up' | 'down', isDouble: boolean): 0 | 90 | 180 | 270 {
   if (isDouble) {
-    // Doubles are always vertical (perpendicular to chain)
     switch (direction) {
       case 'right':
       case 'left':
-        return 0  // vertical
+        return 0
       case 'down':
       case 'up':
-        return 90  // horizontal
+        return 90
     }
   } else {
-    // Regular tiles follow chain direction
     switch (direction) {
-      case 'right': return 90   // horizontal, pointing right
-      case 'left': return 270  // horizontal, pointing left
-      case 'down': return 0    // vertical, pointing down
-      case 'up': return 180    // vertical, pointing up
+      case 'right': return 90
+      case 'left': return 270
+      case 'down': return 0
+      case 'up': return 180
     }
   }
   return 0
 }
 
-// Determine if tile needs flipping and which values go where
+// ============================================================
+// FIXED: calculateTileValues - Correct matching logic
+// ============================================================
 function calculateTileValues(
   tile: DominoTile,
   connectValue: number,
   isLeft: boolean
 ): { top: number; bottom: number; flipped: boolean } {
-  // The matching number should be on the side that connects to the chain
-  // For left end: matching number goes to top (connects to previous tile's top)
-  // For right end: matching number goes to bottom (connects to previous tile's bottom)
+  // For LEFT end: the matching number goes to BOTTOM (connects to previous tile's TOP)
+  // For RIGHT end: the matching number goes to TOP (connects to previous tile's BOTTOM)
 
-  if (tile.top === connectValue) {
-    // No flip needed - top matches
-    return { top: tile.top, bottom: tile.bottom, flipped: false }
+  if (isLeft) {
+    // Left extension: matching number at BOTTOM
+    if (tile.bottom === connectValue) {
+      return { top: tile.top, bottom: tile.bottom, flipped: false }
+    }
+    return { top: tile.bottom, bottom: tile.top, flipped: true }
   } else {
-    // Flip needed - bottom matches
+    // Right extension: matching number at TOP
+    if (tile.top === connectValue) {
+      return { top: tile.top, bottom: tile.bottom, flipped: false }
+    }
     return { top: tile.bottom, bottom: tile.top, flipped: true }
   }
 }
 
 // ============================================================
-// PLAY TILE - PROPER DOMINO CHAIN
+// PLAY TILE - FIXED: Correct board insertion and value assignment
 // ============================================================
 export const playTile = (state: GameState, playerIndex: number, tileIndex: number, end: TileEnd): MoveResult => {
   const player = state.players[playerIndex]
@@ -258,44 +228,34 @@ export const playTile = (state: GameState, playerIndex: number, tileIndex: numbe
     // First tile - center, vertical
     x = 0
     y = 0
-    rotation = isDouble ? 0 : 0  // Both vertical
+    rotation = 0
     tileTop = tile.top
     tileBottom = tile.bottom
   } else if (end === 'left') {
     // Extend left
     const firstTile = state.board[0]
-    const connectValue = firstTile.top === firstTile.bottom 
-      ? firstTile.top 
-      : (firstTile.isLeft ? firstTile.top : firstTile.bottom)
+    const connectValue = firstTile.isLeft ? firstTile.top : firstTile.bottom
 
     const values = calculateTileValues(tile, connectValue, true)
     tileTop = values.top
     tileBottom = values.bottom
 
-    // Position: to the left of first tile
     const tileLength = isDouble ? TILE_W : TILE_H
     x = firstTile.x - tileLength - CHAIN_GAP
     y = firstTile.y
-
-    // Direction is opposite of first tile's chain direction
-    // For simplicity, assume chain goes right, so left extension goes left
     rotation = calculateRotation('left', isDouble)
   } else {
     // Extend right
     const lastTile = state.board[state.board.length - 1]
-    const connectValue = lastTile.top === lastTile.bottom
-      ? lastTile.top
-      : (lastTile.isLeft ? lastTile.bottom : lastTile.top)
+    const connectValue = lastTile.isLeft ? lastTile.bottom : lastTile.top
 
     const values = calculateTileValues(tile, connectValue, false)
     tileTop = values.top
     tileBottom = values.bottom
 
-    // Position: to the right of last tile
     const tileLength = isDouble ? TILE_W : TILE_H
     x = lastTile.x + tileLength + CHAIN_GAP
     y = lastTile.y
-
     rotation = calculateRotation('right', isDouble)
   }
 
@@ -309,11 +269,12 @@ export const playTile = (state: GameState, playerIndex: number, tileIndex: numbe
     bottom: tileBottom,
   }
 
-  const newBoard = end === 'left' 
+  // FIXED: Use unshift for left, push for right
+  const newBoard = end === 'left'
     ? [playedTile, ...state.board]
     : [...state.board, playedTile]
 
-  // Remove tile from hand WITHOUT re-sorting
+  // Remove tile from hand
   const newHand = [...player.hand]
   newHand.splice(tileIndex, 1)
 
@@ -323,9 +284,9 @@ export const playTile = (state: GameState, playerIndex: number, tileIndex: numbe
   // All Fives scoring
   const allFivesScore = calculateAllFivesScore(newBoard)
   if (allFivesScore > 0) {
-    newPlayers[playerIndex] = { 
-      ...newPlayers[playerIndex], 
-      score: newPlayers[playerIndex].score + allFivesScore 
+    newPlayers[playerIndex] = {
+      ...newPlayers[playerIndex],
+      score: newPlayers[playerIndex].score + allFivesScore
     }
   }
 
@@ -429,57 +390,91 @@ export const createInitialState = (playerNames: string[], playerAvatars: string[
 }
 
 // ============================================================
-// AI - ORIGINAL
+// AI - IMPROVED with better strategy
 // ============================================================
 export const getAIMove = (state: GameState, playerIndex: number, difficulty: string): { tileIndex: number; end: TileEnd } | null => {
   const ai = state.players[playerIndex]
   if (!ai || !ai.isAI) return null
 
-  const validMoves: { tileIndex: number; end: TileEnd }[] = []
+  const validMoves: { tileIndex: number; end: TileEnd; score: number }[] = []
   for (let i = 0; i < ai.hand.length; i++) {
     const ends = getValidEnds(ai.hand[i], state.board)
     for (const end of ends) {
-      validMoves.push({ tileIndex: i, end })
+      // Simulate the move to calculate score
+      let score = 0
+      const tile = ai.hand[i]
+
+      // Prefer doubles (harder to play later)
+      if (tile.top === tile.bottom) score += 5
+
+      // Prefer high value tiles
+      score += tile.top + tile.bottom
+
+      // In All Fives, prefer moves that give points
+      if (state.board.length > 0) {
+        const { leftValue, rightValue } = getBoardEnds(state.board)
+        const target = end === 'left' ? leftValue : rightValue
+        const otherEnd = end === 'left' ? rightValue : leftValue
+        const newTotal = (tile.top === target ? tile.bottom : tile.top) + otherEnd
+        if (newTotal % 5 === 0) score += 15
+      }
+
+      validMoves.push({ tileIndex: i, end, score })
     }
   }
 
   if (validMoves.length === 0) return null
-  if (difficulty === 'easy') return validMoves[Math.floor(Math.random() * validMoves.length)]
+  if (difficulty === 'easy') {
+    return validMoves[Math.floor(Math.random() * validMoves.length)]
+  }
 
-  validMoves.sort((a, b) => {
-    const tileA = ai.hand[a.tileIndex]
-    const tileB = ai.hand[b.tileIndex]
-    const baseA = (tileA.top === tileA.bottom ? 10 : 0) + tileA.top + tileA.bottom
-    const baseB = (tileB.top === tileB.bottom ? 10 : 0) + tileB.top + tileB.bottom
-    return baseB - baseA
-  })
+  // Sort by score (highest first)
+  validMoves.sort((a, b) => b.score - a.score)
 
-  return difficulty === 'hard' ? validMoves[0] : validMoves[Math.floor(Math.random() * Math.min(3, validMoves.length))]
+  if (difficulty === 'hard') {
+    return { tileIndex: validMoves[0].tileIndex, end: validMoves[0].end }
+  }
+
+  // Medium: pick from top 3
+  const topMoves = validMoves.slice(0, Math.min(3, validMoves.length))
+  const selected = topMoves[Math.floor(Math.random() * topMoves.length)]
+  return { tileIndex: selected.tileIndex, end: selected.end }
 }
 
 // ============================================================
-// GAME BLOCKED
+// GAME BLOCKED - FIXED: Proper blocked game detection
 // ============================================================
 export const isGameBlocked = (state: GameState): boolean => {
+  // If stock is not empty, game is not blocked (players can draw)
+  if (state.stock.length > 0) return false
+
+  // Check if ANY player can play
   for (let i = 0; i < state.players.length; i++) {
     for (const tile of state.players[i].hand) {
       if (getValidEnds(tile, state.board).length > 0) return false
     }
   }
-  return state.stock.length === 0
+  return true
 }
 
 export const getBlockedWinner = (state: GameState): Player | null => {
   let winner = state.players[0]
   let minScore = calculateScore(winner.hand)
+  let tie = false
+
   for (let i = 1; i < state.players.length; i++) {
     const score = calculateScore(state.players[i].hand)
     if (score < minScore) {
       minScore = score
       winner = state.players[i]
+      tie = false
+    } else if (score === minScore) {
+      tie = true
     }
   }
-  return winner
+
+  // Return null if tie (draw)
+  return tie ? null : winner
 }
 
 export const canPlayerPlay = (state: GameState, playerIndex: number): boolean => {
