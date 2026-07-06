@@ -1,17 +1,17 @@
-name: Recreate Android & Build APK
+name: Build Android APK
 
 on:
+  push:
+    branches: [main, master]
   workflow_dispatch:
 
 jobs:
-  recreate-and-build:
-    name: Recreate Android and Build
+  build:
+    name: Build & Release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -36,24 +36,16 @@ jobs:
       - name: Install Capacitor CLI
         run: npm install -g @capacitor/cli
 
-      # ✅ Delete and recreate android
-      - name: Delete old Android
-        run: rm -rf android
-
-      - name: Add fresh Android
-        run: npx cap add android
-
-      - name: Sync Android
-        run: npx cap sync android
-
-      # ✅ Commit the new android folder
-      - name: Commit new Android
+      # ✅ Check if android exists, if not create it
+      - name: Ensure Android platform
         run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add android/
-          git commit -m "fix: recreate android with Gradle 8 compatible config" || echo "No changes"
-          git push origin main || echo "Push failed"
+          if [ ! -d "android" ]; then
+            echo "Creating new android..."
+            npx cap add android
+          else
+            echo "Android exists, syncing..."
+            npx cap sync android
+          fi
 
       - name: Build APK
         run: |
