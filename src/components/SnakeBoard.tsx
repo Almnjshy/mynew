@@ -45,6 +45,11 @@ export default function SnakeBoard({ board }: Props) {
           const x = (tile.col - minCol) * cellW
           const y = (tile.row - minRow) * cellH
 
+          // FIXED: Apply rotation based on tile.rotation
+          const isHorizontal = tile.rotation === 90 || tile.rotation === 270
+          const tileWidth = isHorizontal ? TILE_H : TILE_W
+          const tileHeight = isHorizontal ? TILE_W : TILE_H
+
           return (
             <div
               key={tile.id}
@@ -52,9 +57,11 @@ export default function SnakeBoard({ board }: Props) {
               style={{
                 left: x,
                 top: y,
-                width: TILE_W,
-                height: TILE_H,
+                width: tileWidth,
+                height: tileHeight,
                 zIndex: index,
+                transform: `rotate(${tile.rotation}deg)`,
+                transformOrigin: 'center center',
               }}
             >
               <div className="w-full h-full bg-[#f5f0e6] border-2 border-[#8b7355] rounded-lg flex flex-col overflow-hidden shadow-md">
@@ -73,7 +80,6 @@ export default function SnakeBoard({ board }: Props) {
                 <div 
                   className="absolute w-2 h-2 bg-[#8b7355] rounded-full"
                   style={{
-                    // Show connection point based on position relative to previous tile
                     ...(tile.col > board[index-1].col ? { right: -5, top: '50%', transform: 'translateY(-50%)' } :
                        tile.col < board[index-1].col ? { left: -5, top: '50%', transform: 'translateY(-50%)' } :
                        tile.row > board[index-1].row ? { bottom: -5, left: '50%', transform: 'translateX(-50%)' } :
