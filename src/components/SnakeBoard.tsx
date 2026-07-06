@@ -29,6 +29,8 @@ export default function SnakeBoard({ board }: Props) {
       <div className="relative">
         {board.map((tile) => {
           // Calculate display dimensions based on rotation
+          // 0° or 180° = vertical (portrait): width=40, height=80
+          // 90° or 270° = horizontal (landscape): width=80, height=40
           const isVertical = tile.rotation === 0 || tile.rotation === 180
           const width = isVertical ? 40 : 80
           const height = isVertical ? 80 : 40
@@ -38,7 +40,7 @@ export default function SnakeBoard({ board }: Props) {
               key={tile.id}
               className="absolute"
               style={{
-                left: tile.x - centerX + 200,  // Center in container
+                left: tile.x - centerX + 200,
                 top: tile.y - centerY + 150,
                 width: width,
                 height: height,
@@ -47,13 +49,13 @@ export default function SnakeBoard({ board }: Props) {
               }}
             >
               <div className="w-full h-full bg-[#f5f0e6] border border-[#8b7355] rounded-md flex flex-col overflow-hidden shadow-md">
-                {/* Top half - always the connected side (inner) */}
+                {/* Top half */}
                 <div className="flex-1 flex items-center justify-center border-b border-[#8b7355]/40 relative">
-                  <Dots count={tile.connectedValue} />
+                  <Dots count={tile.top} />
                 </div>
-                {/* Bottom half - always the exposed side (outer) */}
+                {/* Bottom half */}
                 <div className="flex-1 flex items-center justify-center relative">
-                  <Dots count={tile.exposedValue} />
+                  <Dots count={tile.bottom} />
                 </div>
               </div>
             </div>
