@@ -136,13 +136,13 @@ function getTilesInSameRow(board: BoardTile[], targetTile: BoardTile): BoardTile
 }
 
 // ============================================================
-// SNAKE LAYOUT ENGINE - Updated with dynamic container width
+// SNAKE LAYOUT ENGINE - Dynamic container width
 // ============================================================
 function calculateNextPosition(
   board: BoardTile[],
   end: TileEnd,
   isDouble: boolean,
-  containerWidth: number // تم إضافة هذا ليكون ديناميكياً
+  containerWidth: number
 ): { x: number; y: number; rotation: 0 | 90 | 180 | 270 } {
 
   if (board.length === 0) {
@@ -151,8 +151,6 @@ function calculateNextPosition(
 
   const newTileWidth = isDouble ? TILE_W : TILE_H  
   const newTileHeight = isDouble ? TILE_H : TILE_W 
-  
-  // حساب العرض المتاح ديناميكياً بناءً على الـ container
   const AVAILABLE_W = containerWidth / 2 - BOARD_MARGIN
 
   if (end === 'right') {
@@ -168,7 +166,7 @@ function calculateNextPosition(
       return {
         x: firstTileInRow.x,
         y: lastTile.y + Math.max(lastDims.height, TILE_H) + GAP * 4,
-        rotation: isDouble ? 0 : 90 // الدبل يوضع عمودياً بينما العادي يوضع أفقياً في المسار الجديد
+        rotation: isDouble ? 0 : 90
       }
     }
 
@@ -237,8 +235,6 @@ export const playTile = (state: GameState, playerIndex: number, tileIndex: numbe
   }
 
   const isDouble = tile.top === tile.bottom
-
-  // تمرير عرض الحاوية (containerWidth) هنا
   const position = calculateNextPosition(state.board, end, isDouble, containerWidth)
 
   let tileTop: number, tileBottom: number
@@ -313,7 +309,7 @@ export const playTile = (state: GameState, playerIndex: number, tileIndex: numbe
 }
 
 // ============================================================
-// DRAW FROM STOCK & SCORING
+// DRAW FROM STOCK
 // ============================================================
 export const drawFromStock = (state: GameState, playerIndex: number): GameState => {
   if (state.stock.length === 0) return state
@@ -330,6 +326,9 @@ export const drawFromStock = (state: GameState, playerIndex: number): GameState 
   return { ...state, stock: newStock, players: newPlayers }
 }
 
+// ============================================================
+// SCORING
+// ============================================================
 export const calculateScore = (hand: DominoTile[]): number => {
   return hand.reduce((sum, tile) => sum + tile.top + tile.bottom, 0)
 }
@@ -342,7 +341,7 @@ export const calculateAllFivesScore = (board: BoardTile[]): number => {
 }
 
 // ============================================================
-// INITIALIZE GAME (Removed unused snake state variables)
+// INITIALIZE GAME
 // ============================================================
 export const createInitialState = (playerNames: string[], playerAvatars: string[]): GameState => {
   const stock = createDominoSet()
@@ -373,4 +372,89 @@ export const createInitialState = (playerNames: string[], playerAvatars: string[
   }
 }
 
-// (باقي دوال AI و isGameBlocked كما هي، لم يتم تغييرها)
+// ============================================================
+// AI
+// ============================================================
+export const getAIMove = (state: GameState, playerIndex: number, difficulty: string): { tileIndex: number; end: TileEnd } | null => {
+  const ai = state.players[playerIndex]
+  if (!ai || !ai.isAI) return null
+
+  const validMoves: { tileIndex: number; end: TileEnd; score: number }[] = []
+  for (let i = 0; i < ai.hand.length; i++) {
+    const ends = getValidEnds(ai.hand[i], state.board)
+    for (const end of ends) {
+      let score = 0
+      const tile = ai.hand[i]
+
+      if (tile.top === tile.bottom) score += 5
+      score += tile.top + tile.bottom
+
+      if (state.board.length > 0) {
+        const { leftValue, rightValue } = getBoardEnds(state.board)
+        const target = end === 'left' ? leftValue : rightValue
+        const otherEnd = end === 'left' ? rightValue : leftValue
+        const newTotal = (tile.top === target ? tile.bottom : tile.top) + otherEnd
+        if (newTotal % 5 === 0) score += 15
+      }
+
+      validMoves.push({ tileIndex: i, end, score })
+    }
+  }
+
+  if (validMoves.length === 0) return null
+  if (difficulty === 'easy') {
+    return validMoves[Math.floor(Math.random() * validMoves.length)]
+  }
+
+  validMoves.sort((a, b) => b.score - a.score)
+
+  if (difficulty === 'hard') {
+    return { tileIndex: validMoves[0].tileIndex, end: validMoves[0].end }
+  }
+
+  const topMoves = validMoves.slice(0, Math.min(3, validMoves.length))
+  return topMoves[Math.floor(Math.random() * topMoves.length)]
+}
+
+// ============================================================
+// GAME BLOCKED (هذا القسم كان مفقوداً وتسبب في الخطأ)
+// ============================================================
+export const isGameBlocked = (state: GameState): boolean => {
+  if (state.stock.length > 0) return false
+  for (let i = 0; i < state.players.length; i++) {
+    for (const tile of state.players[i].hand) {
+      if (getValidEnds(tile, state.board).length > 0) return false
+    }
+  }
+  return true
+}
+
+export const getBlockedWinner = (state: GameState): Player | null => {
+  let winner = state.players[0]
+  let minScore = calculateScore(winner.hand)
+  let tie = false
+
+  for (let i = 1; i < state.players.length; i++) {
+    const score = calculateScore(state.players[i].hand)
+    if (score < minScore) {
+      minScore = score
+      winner = state.players[i]
+      tie = false
+    } else if (score === minScore) {
+      tie = true
+    }
+  }
+
+  return tie ? null : winner
+}
+
+export const canPlayerPlay = (state: GameState, playerIndex: number): boolean => {
+  for (const tile of state.players[playerIndex].hand) {
+    if (getValidEnds(tile, state.board).length > 0) return true
+  }
+  return false
+}
+
+export const skipTurn = (state: GameState): GameState => {
+  return { ...state, currentPlayerIndex: (state.currentPlayerIndex + 1) % state.players.length }
+}
