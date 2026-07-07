@@ -76,60 +76,67 @@ function getTileDimensions(rotation: number, isDouble: boolean): { width: number
   if (rotation === 0 || rotation === 180) return { width: TILE_W, height: TILE_H }
   return { width: TILE_H, height: TILE_W }
 }
-function getTilesInSameRow(board: BoardTile[], targetTile: BoardTile): BoardTile[] {
-  return board.filter(t => Math.abs(t.y - targetTile.y) < 1)
-}
 
 // ==========================================================
-// 🛠️ هُنا تم الإصلاح الرياضي (حساب العرض بناءً على الزاوية بدقة)
+// 🛠️ الحل الهندسي الجديد (معادلة الانعطاف بالحواف)
 // ==========================================================
 function calculateNextPosition(
   board: BoardTile[], end: TileEnd, isDouble: boolean, containerWidth: number
 ): { x: number; y: number; rotation: 0 | 90 | 180 | 270 } {
   if (board.length === 0) return { x: 0, y: 0, rotation: 0 }
 
-  const nextRotation = end === 'right' ? (isDouble ? 0 : 90) : (isDouble ? 0 : 270)
-  const dims = getTileDimensions(nextRotation, isDouble) // نعتمد على الأبعاد الحقيقية للدوران
-  const newTileWidth = dims.width
-  const newTileHeight = dims.height
-  
-  const AVAILABLE_W = containerWidth / 2 - BOARD_MARGIN // تأكيد المساحة المتاحة للانعطاف
+  // تأمين قيمة العرض لضمان عدم انهيار المعادلة بسبب صفر القيمة
+  const safeWidth = Math.max(containerWidth, 300) // أقل قيمة آمنة هي 300
+  const AVAILABLE_W = safeWidth / 2 - BOARD_MARGIN
 
   if (end === 'right') {
     const lastTile = board[board.length - 1]
     const lastDims = getTileDimensions(lastTile.rotation, lastTile.top === lastTile.bottom)
-    const newX = lastTile.x + lastDims.width / 2 + GAP + newTileWidth / 2
+    const nextRotation: 0 | 90 | 180 | 270 = isDouble ? 0 : 90
+    const nextDims = getTileDimensions(nextRotation, isDouble)
 
-    if (newX + newTileWidth / 2 > AVAILABLE_W) {
-      const currentRowTiles = getTilesInSameRow(board, lastTile)
-      const firstTileInRow = currentRowTiles[0]
+    // 1. حساب مركز القطعة الجديدة بناءً على الحافة اليمنى للقطعة الأخيرة
+    const lastRightEdge = lastTile.x + lastDims.width / 2
+    const newCenterX = lastRightEdge + GAP + nextDims.width / 2
+
+    // 2. التحقق من الانعطاف (هل تجاوزت الحافة اليمنى للميدان؟)
+    if (newCenterX + nextDims.width / 2 > AVAILABLE_W) {
+      // نعم، بدأ صف جديد: نبدأ من الحافة اليسرى للميدان
       return {
-        x: firstTileInRow.x,
-        y: lastTile.y + Math.max(lastDims.height, TILE_H) + GAP * 4,
-        rotation: isDouble ? 0 : 90
+        x: -AVAILABLE_W + nextDims.width / 2,
+        y: lastTile.y + lastDims.height + GAP * 4, // النزول للصف التالي
+        rotation: nextRotation
       }
     }
-    return { x: newX, y: lastTile.y, rotation: nextRotation }
-  } else {
+    // لا، استمر بنفس الصف الأفقي
+    return { x: newCenterX, y: lastTile.y, rotation: nextRotation }
+
+  } else { // end === 'left'
     const firstTile = board[0]
     const firstDims = getTileDimensions(firstTile.rotation, firstTile.top === firstTile.bottom)
-    const newX = firstTile.x - firstDims.width / 2 - GAP - newTileWidth / 2
+    const nextRotation: 0 | 90 | 180 | 270 = isDouble ? 0 : 270
+    const nextDims = getTileDimensions(nextRotation, isDouble)
 
-    if (newX - newTileWidth / 2 < -AVAILABLE_W) {
-      const currentRowTiles = getTilesInSameRow(board, firstTile)
-      const lastTileInRow = currentRowTiles[currentRowTiles.length - 1]
+    // 1. حساب مركز القطعة الجديدة بناءً على الحافة اليسرى للقطعة الأولى
+    const firstLeftEdge = firstTile.x - firstDims.width / 2
+    const newCenterX = firstLeftEdge - GAP - nextDims.width / 2
+
+    // 2. التحقق من الانعطاف (هل تجاوزت الحافة اليسرى للميدان؟)
+    if (newCenterX - nextDims.width / 2 < -AVAILABLE_W) {
+      // نعم، بدأ صف جديد: نبدأ من الحافة اليمنى للميدان
       return {
-        x: lastTileInRow.x,
-        y: firstTile.y + Math.max(firstDims.height, TILE_H) + GAP * 4,
-        rotation: isDouble ? 0 : 270
+        x: AVAILABLE_W - nextDims.width / 2,
+        y: firstTile.y + firstDims.height + GAP * 4, // النزول للصف التالي
+        rotation: nextRotation
       }
     }
-    return { x: newX, y: firstTile.y, rotation: nextRotation }
+    // لا، استمر بنفس الصف الأفقي
+    return { x: newCenterX, y: firstTile.y, rotation: nextRotation }
   }
 }
 
 // ==========================================================
-// 🛠️ ضمان تطابق القيم رياضيًا (منع العشوائية)
+// 🛠️ ضمان تطابق القيم رياضيًا
 // ==========================================================
 function calculateTileValues(tile: DominoTile, connectValue: number, isLeft: boolean): { top: number; bottom: number; flipped: boolean } {
   if (isLeft) {
@@ -139,7 +146,7 @@ function calculateTileValues(tile: DominoTile, connectValue: number, isLeft: boo
     if (tile.top === connectValue) return { top: tile.top, bottom: tile.bottom, flipped: false }
     if (tile.bottom === connectValue) return { top: tile.bottom, bottom: tile.top, flipped: true }
   }
-  return { top: tile.top, bottom: tile.bottom, flipped: false } // إرجاع افتراضي آمن (لن يحدث)
+  return { top: tile.top, bottom: tile.bottom, flipped: false }
 }
 
 export const playTile = (state: GameState, playerIndex: number, tileIndex: number, end: TileEnd, containerWidth: number): MoveResult => {
