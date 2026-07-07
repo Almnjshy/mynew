@@ -1,5 +1,12 @@
+// ============================================================
+// TYPES & INTERFACES
+// ============================================================
+
 export type TileEnd = 'left' | 'right'
 export type Direction = 'right' | 'left' | 'up' | 'down'
+export type GameMode = 'classic' | 'points' | 'block' | 'allFives' | 'draw'
+export type Difficulty = 'easy' | 'medium' | 'hard'
+export type TimerMode = 'off' | 'standard' | 'fast' | 'blitz' | 'custom'
 
 export interface DominoTile {
   id: string
@@ -20,7 +27,7 @@ export interface PathHead {
   x: number
   y: number
   direction: Direction
-  row: number // تتبع رقم الصف الحالي للالتفاف اللانهائي الصحيح
+  row: number
 }
 
 export interface BoardBounds {
@@ -51,11 +58,31 @@ export interface GameState {
   isBlocked: boolean
   leftHead: PathHead
   rightHead: PathHead
-  bounds: BoardBounds // لحل مشكلة الـ Canvas والديناميكية
+  bounds: BoardBounds
 }
 
 export interface MoveResult {
   valid: boolean
   message?: string
   newState?: GameState
+}
+
+// ============================================================
+// CONSTANTS (المفقودة التي سببت الخطأ)
+// ============================================================
+
+export const TIMER_CONFIG: Record<TimerMode, { label: string; time: number }> = {
+  off: { label: 'بدون مؤقت', time: 0 },
+  standard: { label: 'قياسي (60 ثانية)', time: 60 },
+  fast: { label: 'سريع (30 ثانية)', time: 30 },
+  blitz: { label: 'خاطف (15 ثانية)', time: 15 },
+  custom: { label: 'مخصص', time: 60 }, // القيمة الافتراضية للمخصص
+}
+
+export const GAME_MODE_CONFIG: Record<GameMode, { label: string; icon: string; description: string }> = {
+  classic: { label: 'كلاسيك', icon: '🎯', description: 'العب حتى نفاذ القطع. الأقل نقاطاً يفوز.' },
+  points: { label: 'نقاط', icon: '📊', description: 'العب لعدد محدد من الجولات.' },
+  block: { label: 'حظر', icon: '🚫', description: 'بدون سحب. إذا توقفت اللعبة، يفوز الأقل نقاطاً.' },
+  allFives: { label: 'الخمسات', icon: '⭐', description: 'احصل على نقاط إضافية عند جعل الأطراف من مضاعفات الرقم 5.' },
+  draw: { label: 'سحب', icon: '🔄', description: 'اسحب القطع من المخزن عند عدم القدرة على اللعب.' },
 }
