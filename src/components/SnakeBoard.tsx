@@ -1,67 +1,133 @@
-import { BoardTile } from '@/types/game'
-import { useMemo } from 'react'
+import { BoardTile, GameState, TileEnd } from '@/types/game'
 
 interface Props {
-  board: BoardTile[]
+  state: GameState
+  onPlayTile?: (tileIndex: number, end: TileEnd) => void
+  selectedTileIndex: number | null
 }
 
-export default function SnakeBoard({ board }: Props) {
+export default function SnakeBoard({ state, onPlayTile, selectedTileIndex }: Props) {
+  const { board, bounds, leftHead, rightHead } = state
+
   if (board.length === 0) {
-    return <div className="flex items-center justify-center h-full"><div className="text-white/50 text-sm">ابدأ اللعب</div></div>
+    return (
+      <div className="flex items-center justify-center h-full min-h-[450px] bg-[#1b4d3e] rounded-xl text-white/40 font-bold">
+        لوحة اللعب فارغة. العب قطعة الدبل الأولى للبدء!
+      </div>
+    )
   }
 
-  const { offsetX, offsetY, boardWidth, boardHeight } = useMemo(() => {
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
-    for (const tile of board) {
-      const isHorizontal = tile.rotation === 90 || tile.rotation === 270
-      const tileW = isHorizontal ? 72 : 36
-      const tileH = isHorizontal ? 36 : 72
-      const left = tile.x - tileW / 2
-      const right = tile.x + tileW / 2
-      const top = tile.y - tileH / 2
-      const bottom = tile.y + tileH / 2
-      if (left < minX) minX = left
-      if (right > maxX) maxX = right
-      if (top < minY) minY = top
-      if (bottom > maxY) maxY = bottom
-    }
-    return { offsetX: -minX + 20, offsetY: -minY + 20, boardWidth: maxX - minX + 40, boardHeight: maxY - minY + 40 }
-  }, [board])
+  // حساب العرض والارتفاع الكلي الفعلي للـ Canvas بناءً على حركة القطع
+  const canvasWidth = bounds.maxX - bounds.minX
+  const canvasHeight = bounds.maxY - bounds.minY
 
-  const containerStyle: React.CSSProperties = { position: 'relative', width: `${Math.max(boardWidth, 300)}px`, height: `${Math.max(boardHeight, 300)}px` }
+  // دالة لمطابقة إحداثيات المحرك إلى نظام شبكة الـ DOM الفعلي داخل الكانفاس الممتد
+  const getCanvasCoords = (x: number, y: number) => {
+    return {
+      left: `${x - bounds.minX}px`,
+      top: `${y - bounds.minY}px`,
+    }
+  }
 
   return (
-    <div className="w-full h-full flex items-center justify-center overflow-auto">
-      <div style={containerStyle}>
+    /* الحاوية الخارجية تضمن ظهور الـ Scrollbars الحقيقية فوراً عند خروج القطع عن النطاق الأصلي */
+    <div className="w-full h-[550px] overflow-auto bg-[#133b2f] rounded-xl shadow-2xl p-6 relative border-4 border-[#0b241d]">
+      
+      {/* الكانفاس الداخلي الديناميكي المتمدد هندسياً */}
+      <div 
+        className="relative bg-[#1b4d3e] rounded-lg shadow-inner transition-all duration-300 pattern-grid"
+        style={{ width: `${canvasWidth}px`, height: `${canvasHeight}px` }}
+      >
+        
+        {/* تصيير قطع الدومينو */}
         {board.map((tile) => {
           const isHorizontal = tile.rotation === 90 || tile.rotation === 270
-          const tileW = isHorizontal ? 72 : 36
-          const tileH = isHorizontal ? 36 : 72
-          const left = tile.x + offsetX - tileW / 2
-          const top = tile.y + offsetY - tileH / 2
+          const currentWidth = isHorizontal ? 72 : 36
+          const currentHeight = isHorizontal ? 36 : 72
+          const coords = getCanvasCoords(tile.x, tile.y)
 
           return (
-            <div key={tile.id} style={{ position: 'absolute', left: `${left}px`, top: `${top}px`, width: `${tileW}px`, height: `${tileH}px`, transform: `rotate(${tile.rotation}deg)`, transformOrigin: 'center center', zIndex: 1 }}>
-              <div style={{ width: '100%', height: '100%', backgroundColor: '#f5f0e6', border: '2px solid #8b7355', borderRadius: '6px', display: 'flex', flexDirection: isHorizontal ? 'row' : 'column', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', borderBottom: !isHorizontal ? '1px solid rgba(139,115,85,0.4)' : 'none', borderRight: isHorizontal ? '1px solid rgba(139,115,85,0.4)' : 'none' }}><Dots count={tile.top} /></div>
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}><Dots count={tile.bottom} /></div>
+            <div
+              key={tile.id}
+              className="absolute transition-all duration-300 ease-out flex items-center justify-center"
+              style={{
+                left: coords.left,
+                top: coords.top,
+                width: `${currentWidth}px`,
+                height: `${currentHeight}px`,
+                transform: 'translate(-50%, -50%)', // تمركز المركز المطلق بدقة متناهية
+              }}
+            >
+              {/* غلاف الدوران الصافي لمنع انزياح البنية الداخلية */}
+              <div 
+                className="w-[36px] h-[72px] bg-[#f5f0e6] border-2 border-[#8b7355] rounded-md flex flex-col overflow-hidden shadow-md origin-center"
+                style={{ transform: `rotate(${tile.rotation || 0}deg)` }}
+              >
+                <div className="flex-1 flex items-center justify-center relative border-b border-[#8b7355]/30">
+                  <Dots count={tile.top} />
+                </div>
+                <div className="flex-1 flex items-center justify-center relative">
+                  <Dots count={tile.bottom} />
+                </div>
               </div>
             </div>
           )
         })}
+
+        {/* نقاط الإسقاط المضيئة التفاعلية (Drop Zones) عند تحديد قطعة معينة في يد اللاعب */}
+        {selectedTileIndex !== null && onPlayTile && (
+          <>
+            {/* منطقة إسقاط الجانب الأيسر */}
+            <div
+              className="absolute w-12 h-12 bg-yellow-400/30 border-2 border-dashed border-yellow-400 rounded-full animate-ping cursor-pointer flex items-center justify-center"
+              style={{
+                ...getCanvasCoords(leftHead.x, leftHead.y),
+                transform: 'translate(-50%, -50%)',
+              }}
+              onClick={() => onPlayTile(selectedTileIndex, 'left')}
+              title="العب في الطرف الأيسر"
+            />
+            
+            {/* منطقة إسقاط الجانب الأيمن */}
+            <div
+              className="absolute w-12 h-12 bg-cyan-400/30 border-2 border-dashed border-cyan-400 rounded-full animate-ping cursor-pointer flex items-center justify-center"
+              style={{
+                ...getCanvasCoords(rightHead.x, rightHead.y),
+                transform: 'translate(-50%, -50%)',
+              }}
+              onClick={() => onPlayTile(selectedTileIndex, 'right')}
+              title="العب في الطرف الأيمن"
+            />
+          </>
+        )}
+
       </div>
     </div>
   )
 }
 
 function Dots({ count }: { count: number }) {
-  const positions: Record<number, Array<{ top?: string; left?: string; right?: string; bottom?: string; transform?: string }>> = {
-    0: [], 1: [{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }],
-    2: [{ top: '20%', right: '20%' }, { bottom: '20%', left: '20%' }],
-    3: [{ top: '20%', right: '20%' }, { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }, { bottom: '20%', left: '20%' }],
-    4: [{ top: '20%', left: '20%' }, { top: '20%', right: '20%' }, { bottom: '20%', left: '20%' }, { bottom: '20%', right: '20%' }],
-    5: [{ top: '20%', left: '20%' }, { top: '20%', right: '20%' }, { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }, { bottom: '20%', left: '20%' }, { bottom: '20%', right: '20%' }],
-    6: [{ top: '20%', left: '20%' }, { top: '20%', right: '20%' }, { top: '50%', left: '20%', transform: 'translateY(-50%)' }, { top: '50%', right: '20%', transform: 'translateY(-50%)' }, { bottom: '20%', left: '20%' }, { bottom: '20%', right: '20%' }]
+  const positions: Record<number, string[]> = {
+    0: [], 1: ['c'], 2: ['tl','br'], 3: ['tl','c','br'],
+    4: ['tl','tr','bl','br'], 5: ['tl','tr','c','bl','br'],
+    6: ['tl','tr','ml','mr','bl','br']
   }
-  return (<div style={{ position: 'relative', width: '100%', height: '100%' }}>{(positions[count] || []).map((style, i) => (<div key={i} style={{ position: 'absolute', width: '16%', height: '16%', backgroundColor: '#1a1a2e', borderRadius: '50%', ...style }} />))}</div>)
+
+  const posMap: Record<string, React.CSSProperties> = {
+    'tl': { top: '15%', left: '15%' },
+    'tr': { top: '15%', right: '15%' },
+    'ml': { top: '50%', left: '15%', transform: 'translateY(-50%)' },
+    'mr': { top: '50%', right: '15%', transform: 'translateY(-50%)' },
+    'c':  { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' },
+    'bl': { bottom: '15%', left: '15%' },
+    'br': { bottom: '15%', right: '15%' },
+  }
+
+  return (
+    <div className="relative w-full h-full p-1">
+      {(positions[count] || []).map((p, i) => (
+        <div key={i} className="absolute w-[20%] h-[20%] bg-[#1a1a2e] rounded-full" style={posMap[p]} />
+      ))}
+    </div>
+  )
 }
