@@ -1,13 +1,28 @@
 import { DominoTile, Player, GameState, TileEnd, MoveResult, BoardTile } from '@/types/game'
 
 // ============================================================
+// ⚠️ ملاحظة مهمة عن الأنواع (Types)
+// ============================================================
+// هذا الإصلاح يحتاج حقلين اختياريين إضافيين على BoardTile في types/game.ts:
+//
+//   export interface BoardTile extends DominoTile {
+//     x: number
+//     y: number
+//     rotation: 0 | 90 | 180 | 270
+//     isLeft: boolean
+//     runDir?: 'left' | 'right'   // اتجاه الصف الأفقي الذي تنتمي له هذه القطعة
+//     isTurn?: boolean            // هل هذه قطعة "التفاف" عمودية تربط بين صفين
+//   }
+//
+// كلا الحقلين اختياري (optional) فلن يكسر أي كود آخر يستخدم BoardTile.
+
+// ============================================================
 // CONSTANTS - Board Layout
 // ============================================================
-const TILE_W = 36      // Width of narrow side (double tile width)
-const TILE_H = 72      // Length of tile (normal tile length)
-const GAP = 2          // Small gap between tiles
-const BOARD_MARGIN = 40 // Margin from screen edges
-const AVAILABLE_W = 140 // Half of available width (conservative for mobile)
+const TILE_W = 36       // عرض الجانب الضيق (عرض القطعة المزدوجة/العمودية)
+const TILE_H = 72       // طول القطعة (الجانب الطويل)
+const GAP = 2            // فجوة صغيرة بين القطع
+const AVAILABLE_W = 140  // نصف العرض المتاح تقريبًا (محافظ، مناسب للجوال)
 
 // ============================================================
 // DECK CREATION
@@ -94,10 +109,9 @@ export const getBoardEnds = (board: BoardTile[]): { leftValue: number; rightValu
   const leftTile = board[0]
   const rightTile = board[board.length - 1]
 
-  // Stored values after calculateTileValues:
-  // LEFT end tile: top = OPEN (outward), bottom = CONNECTED (to chain)
-  // RIGHT end tile: top = CONNECTED (to chain), bottom = OPEN (outward)
-
+  // بعد calculateTileValues:
+  // قطعة الطرف الأيسر: top = مفتوح (للخارج)، bottom = متصل بالسلسلة
+  // قطعة الطرف الأيمن: top = متصل بالسلسلة، bottom = مفتوح (للخارج)
   return {
     leftValue: leftTile.top,
     rightValue: rightTile.bottom,
@@ -127,94 +141,81 @@ export const getValidEnds = (tile: DominoTile, board: BoardTile[]): TileEnd[] =>
 // ============================================================
 function getTileDimensions(rotation: number, isDouble: boolean): { width: number; height: number } {
   if (isDouble) {
-    // Doubles are always vertical
+    // القطع المزدوجة دائمًا عمودية
     return { width: TILE_W, height: TILE_H }
   }
-  // Normal tiles
   if (rotation === 0 || rotation === 180) {
-    // Vertical
+    // عمودية (قطعة أول اللعب أو قطعة التفاف)
     return { width: TILE_W, height: TILE_H }
   }
-  // Horizontal (90 or 270)
+  // أفقية (90 أو 270)
   return { width: TILE_H, height: TILE_W }
 }
 
 // ============================================================
-// SNAKE LAYOUT ENGINE
+// SNAKE LAYOUT ENGINE (تمت إعادة كتابته بالكامل)
 // ============================================================
+// الفكرة: كل قطعة على الطاولة تحمل معها معلومتين توضحان "حالة" الصف الذي
+// تنتمي إليه: اتجاه الحركة الأفقية الحالي (runDir) وهل هي قطعة التفاف
+// عمودية تفصل بين صفّين (isTurn). بهذه الطريقة، عند حساب موضع القطعة
+// التالية، لا نخمّن أي شيء أبدًا — نقرأ الحالة مباشرة من آخر قطعة على
+// نفس الطرف (يسار/يمين) ونعرف بالضبط: هل نكمل نفس الصف أفقيًا، أم نلتف
+// لصف جديد وننعكس الاتجاه (يمين↔يسار) — تمامًا كحركة الثعبان الحقيقية.
 
-// Get the right edge of a tile (x + half width)
-function getRightEdge(tile: BoardTile): number {
-  const dims = getTileDimensions(tile.rotation, tile.top === tile.bottom)
-  return tile.x + dims.width / 2
+function getEdgeTile(board: BoardTile[], end: TileEnd): BoardTile | null {
+  if (board.length === 0) return null
+  return end === 'right' ? board[board.length - 1] : board[0]
 }
 
-// Get the left edge of a tile (x - half width)
-function getLeftEdge(tile: BoardTile): number {
-  const dims = getTileDimensions(tile.rotation, tile.top === tile.bottom)
-  return tile.x - dims.width / 2
-}
-
-// Calculate next position with snake layout
-function calculateNextPosition(
+function computeNextTilePosition(
   board: BoardTile[],
   end: TileEnd,
   isDouble: boolean
-): { x: number; y: number; rotation: 0 | 90 | 180 | 270 } {
+): { x: number; y: number; rotation: 0 | 90 | 180 | 270; runDir: 'left' | 'right'; isTurn: boolean } {
 
+  // أول قطعة على الطاولة: توضع في المنتصف وبشكل عمودي
   if (board.length === 0) {
-    // First tile: center, vertical
-    return { x: 0, y: 0, rotation: 0 }
+    return { x: 0, y: 0, rotation: 0, runDir: end === 'right' ? 'right' : 'left', isTurn: false }
   }
 
-  const newTileWidth = isDouble ? TILE_W : TILE_H  // Width when placed
-  const newTileHeight = isDouble ? TILE_H : TILE_W // Height when placed
+  const edgeTile = getEdgeTile(board, end)!
+  const edgeIsDouble = edgeTile.top === edgeTile.bottom
+  const edgeDims = getTileDimensions(edgeTile.rotation, edgeIsDouble)
 
-  if (end === 'right') {
-    const lastTile = board[board.length - 1]
-    const lastDims = getTileDimensions(lastTile.rotation, lastTile.top === lastTile.bottom)
+  // اتجاه الصف الحالي على هذا الطرف. القطعة المركزية الأولى مشتركة بين
+  // الطرفين ولا تحمل runDir بعد، لذا نستخدم الاتجاه الطبيعي كقيمة افتراضية.
+  const runDir: 'left' | 'right' = edgeTile.runDir ?? (end === 'right' ? 'right' : 'left')
+  const sign = runDir === 'right' ? 1 : -1
 
-    // Calculate new position: place next to last tile's right edge
-    const newX = lastTile.x + lastDims.width / 2 + GAP + newTileWidth / 2
+  const newWidth = isDouble ? TILE_W : TILE_H
+  const newHeight = isDouble ? TILE_H : TILE_W
 
-    // Check if we need to turn (snake)
-    if (newX + newTileWidth / 2 > AVAILABLE_W) {
-      // Turn down
-      return {
-        x: lastTile.x,
-        y: lastTile.y + lastDims.height / 2 + GAP * 3 + TILE_W / 2,
-        rotation: isDouble ? 0 : 0
-      }
-    }
+  // إذا كانت القطعة الطرفية الحالية قطعة "التفاف" عمودية، فنحن نبدأ صفًا
+  // جديدًا من هنا، بالاتجاه المخزَّن فيها (وهو الاتجاه المعكوس أصلًا).
+  const startX = edgeTile.x
+  const startWidthHalf = edgeDims.width / 2
 
-    // Continue right - horizontal
+  const newX = startX + sign * (startWidthHalf + GAP + newWidth / 2)
+  const withinBound = Math.abs(newX) + newWidth / 2 <= AVAILABLE_W
+
+  if (withinBound) {
+    // نكمل في نفس الصف الأفقي
     return {
       x: newX,
-      y: lastTile.y,
-      rotation: isDouble ? 0 : 90
+      y: edgeTile.y,
+      rotation: isDouble ? 0 : (runDir === 'right' ? 90 : 270),
+      runDir,
+      isTurn: false,
     }
-  } else {
-    // end === 'left'
-    const firstTile = board[0]
-    const firstDims = getTileDimensions(firstTile.rotation, firstTile.top === firstTile.bottom)
+  }
 
-    const newX = firstTile.x - firstDims.width / 2 - GAP - newTileWidth / 2
-
-    if (newX - newTileWidth / 2 < -AVAILABLE_W) {
-      // Turn down
-      return {
-        x: firstTile.x,
-        y: firstTile.y + firstDims.height / 2 + GAP * 3 + TILE_W / 2,
-        rotation: isDouble ? 0 : 0
-      }
-    }
-
-    // Continue left - horizontal
-    return {
-      x: newX,
-      y: firstTile.y,
-      rotation: isDouble ? 0 : 270
-    }
+  // وصلنا لحافة العرض المتاح: ننزل صفًا جديدًا للأسفل ونعكس الاتجاه
+  return {
+    x: edgeTile.x,
+    y: edgeTile.y + edgeDims.height / 2 + GAP + newHeight / 2,
+    rotation: 0, // قطعة الالتفاف دائمًا عمودية بصريًا
+    runDir: runDir === 'right' ? 'left' : 'right',
+    isTurn: true,
   }
 }
 
@@ -228,17 +229,15 @@ function calculateTileValues(
 ): { top: number; bottom: number; flipped: boolean } {
 
   if (isLeft) {
-    // Placing on LEFT end
-    // Matching number → BOTTOM (connected to chain on right)
-    // Open number → TOP (facing left, outward)
+    // على الطرف الأيسر: الرقم المطابق → أسفل (متصل بالسلسلة نحو اليمين)
+    // الرقم المفتوح → أعلى (للخارج نحو اليسار)
     if (tile.bottom === connectValue) {
       return { top: tile.top, bottom: tile.bottom, flipped: false }
     }
     return { top: tile.bottom, bottom: tile.top, flipped: true }
   } else {
-    // Placing on RIGHT end
-    // Matching number → TOP (connected to chain on left)
-    // Open number → BOTTOM (facing right, outward)
+    // على الطرف الأيمن: الرقم المطابق → أعلى (متصل بالسلسلة نحو اليسار)
+    // الرقم المفتوح → أسفل (للخارج نحو اليمين)
     if (tile.top === connectValue) {
       return { top: tile.top, bottom: tile.bottom, flipped: false }
     }
@@ -247,7 +246,7 @@ function calculateTileValues(
 }
 
 // ============================================================
-// PLAY TILE - Fixed with proper snake layout
+// PLAY TILE - محرك ثعبان صحيح ومستقر
 // ============================================================
 export const playTile = (state: GameState, playerIndex: number, tileIndex: number, end: TileEnd): MoveResult => {
   const player = state.players[playerIndex]
@@ -260,10 +259,10 @@ export const playTile = (state: GameState, playerIndex: number, tileIndex: numbe
 
   const isDouble = tile.top === tile.bottom
 
-  // Calculate position using Snake Layout
-  const position = calculateNextPosition(state.board, end, isDouble)
+  // حساب الموضع باستخدام محرك الثعبان الجديد
+  const position = computeNextTilePosition(state.board, end, isDouble)
 
-  // Calculate values
+  // حساب القيم (top/bottom) بعد التوصيل
   let tileTop: number, tileBottom: number
 
   if (state.board.length === 0) {
@@ -289,6 +288,8 @@ export const playTile = (state: GameState, playerIndex: number, tileIndex: numbe
     isLeft: end === 'left',
     top: tileTop,
     bottom: tileBottom,
+    runDir: position.runDir,
+    isTurn: position.isTurn,
   }
 
   const newBoard = end === 'left'
@@ -311,14 +312,15 @@ export const playTile = (state: GameState, playerIndex: number, tileIndex: numbe
   }
 
   if (newHand.length === 0) {
+    const playersWithBonus = applyGoingOutBonus(newPlayers, playerIndex)
     return {
       valid: true,
       newState: {
         ...state,
         board: newBoard,
-        players: newPlayers,
+        players: playersWithBonus,
         isGameOver: true,
-        winner: newPlayers[playerIndex],
+        winner: playersWithBonus[playerIndex],
         isBlocked: false,
       }
     }
@@ -363,9 +365,87 @@ export const calculateScore = (hand: DominoTile[]): number => {
 
 export const calculateAllFivesScore = (board: BoardTile[]): number => {
   if (board.length === 0) return 0
-  const { leftValue, rightValue } = getBoardEnds(board)
+
+  const leftTile = board[0]
+  const rightTile = board[board.length - 1]
+  const leftIsDouble = leftTile.top === leftTile.bottom
+  const rightIsDouble = rightTile.top === rightTile.bottom
+
+  // في نظام All Fives: القطعة المزدوجة الواقعة على أحد الطرفين المفتوحين
+  // تُحسب مرتين (كلا نصفيها مكشوف فعليًا)، وليس مرة واحدة فقط.
+  const leftValue = leftTile.top * (leftIsDouble ? 2 : 1)
+  const rightValue = rightTile.bottom * (rightIsDouble ? 2 : 1)
+
   const total = leftValue + rightValue
-  return total % 5 === 0 ? total : 0
+  return total > 0 && total % 5 === 0 ? total : 0
+}
+
+// عند إفراغ يده (domino out)، تُضاف له مجموع نقاط بقية اللاعبين كمكافأة قياسية
+export const applyGoingOutBonus = (players: Player[], winnerIndex: number): Player[] => {
+  const bonus = players.reduce((sum, p, i) => i === winnerIndex ? sum : sum + calculateScore(p.hand), 0)
+  return players.map((p, i) => i === winnerIndex ? { ...p, score: p.score + bonus } : p)
+}
+
+// عند انسداد اللعبة: صاحب أقل مجموع نقاط في يده يفوز، ويُضاف له مجموع نقاط بقية اللاعبين
+export const applyBlockedGameScoring = (state: GameState): GameState => {
+  const winner = getBlockedWinner(state)
+  if (!winner) return state // تعادل: لا نقاط تُضاف لأحد
+  const winnerIndex = state.players.findIndex(p => p.id === winner.id)
+  if (winnerIndex === -1) return state
+  return { ...state, players: applyGoingOutBonus(state.players, winnerIndex) }
+}
+
+// ============================================================
+// STARTING PLAYER
+// ============================================================
+// القاعدة الرسمية: يبدأ صاحب أعلى قطعة مزدوجة (المثالي: 6|6). إن لم تكن
+// هناك أي قطعة مزدوجة في أي يد إطلاقًا (احتمال نادر لكنه وارد)، يبدأ
+// صاحب أعلى مجموع نقاط في قطعة واحدة كقاعدة احتياطية بدل الافتراض التعسفي
+// للاعب رقم 0.
+function findStartingPlayer(players: Player[]): number {
+  let starter = 0
+  let highestDouble = -1
+  for (let i = 0; i < players.length; i++) {
+    for (const tile of players[i].hand) {
+      if (tile.top === tile.bottom && tile.top > highestDouble) {
+        highestDouble = tile.top
+        starter = i
+      }
+    }
+  }
+  if (highestDouble >= 0) return starter
+
+  let highestPipSum = -1
+  for (let i = 0; i < players.length; i++) {
+    for (const tile of players[i].hand) {
+      const sum = tile.top + tile.bottom
+      if (sum > highestPipSum) {
+        highestPipSum = sum
+        starter = i
+      }
+    }
+  }
+  return starter
+}
+
+// للجولة الأولى فقط تُطبَّق قاعدة "أعلى مزدوجة يبدأ". أما ابتداءً من
+// الجولة الثانية، الفائز بالجولة السابقة هو من يبدأ (بأي قطعة يختارها).
+export const createNextRoundState = (state: GameState, previousWinnerIndex: number): GameState => {
+  const stock = createDominoSet()
+  const { players: dealtPlayers, stock: remainingStock } = dealTiles(state.players, stock)
+
+  return {
+    ...state,
+    board: [],
+    players: dealtPlayers,
+    currentPlayerIndex: previousWinnerIndex,
+    stock: remainingStock,
+    round: state.round + 1,
+    isGameOver: false,
+    winner: null,
+    lastMove: null,
+    isBlocked: false,
+  }
 }
 
 // ============================================================
@@ -376,16 +456,7 @@ export const createInitialState = (playerNames: string[], playerAvatars: string[
   const players = createPlayers(playerNames, playerAvatars)
   const { players: dealtPlayers, stock: remainingStock } = dealTiles(players, stock)
 
-  let starter = 0
-  let highestDouble = -1
-  for (let i = 0; i < dealtPlayers.length; i++) {
-    for (const tile of dealtPlayers[i].hand) {
-      if (tile.top === tile.bottom && tile.top > highestDouble) {
-        highestDouble = tile.top
-        starter = i
-      }
-    }
-  }
+  const starter = findStartingPlayer(dealtPlayers)
 
   return {
     board: [],
