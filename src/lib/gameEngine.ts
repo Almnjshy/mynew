@@ -89,13 +89,9 @@ export const dealTiles = (players: Player[], stock: DominoTile[]): { players: Pl
 // ============================================================
 export const getBoardEnds = (board: BoardTile[]): { leftValue: number; rightValue: number } => {
   if (board.length === 0) return { leftValue: -1, rightValue: -1 }
-
-  const leftTile = board[0]
-  const rightTile = board[board.length - 1]
-
   return {
-    leftValue: leftTile.top,
-    rightValue: rightTile.bottom,
+    leftValue: board[0].top,
+    rightValue: board[board.length - 1].bottom,
   }
 }
 
@@ -118,12 +114,12 @@ export const getValidEnds = (tile: DominoTile, board: BoardTile[]): TileEnd[] =>
 }
 
 // ============================================================
-// TILE DIMENSIONS BASED ON ROTATION
+// HELPER: GET TILE DIMENSIONS BASED ON ROTATION
 // ============================================================
 function getTileDimensions(rotation: number, isDouble: boolean): { width: number; height: number } {
-  if (isDouble) {
-    return { width: TILE_W, height: TILE_H }
-  }
+  // القطعة المزدوجة تحافظ على أبعادها العمودية دائماً حسب اللعبة
+  if (isDouble) return { width: TILE_W, height: TILE_H }
+  // إذا كان الدوران 0 أو 180 فالقطعة عمودية، وإذا كان 90 أو 270 فهي أفقية
   if (rotation === 0 || rotation === 180) {
     return { width: TILE_W, height: TILE_H }
   }
@@ -136,7 +132,7 @@ function getTilesInSameRow(board: BoardTile[], targetTile: BoardTile): BoardTile
 }
 
 // ============================================================
-// SNAKE LAYOUT ENGINE - Dynamic container width
+// SNAKE LAYOUT ENGINE - Fixed Rotation & Width Calculations
 // ============================================================
 function calculateNextPosition(
   board: BoardTile[],
@@ -145,12 +141,21 @@ function calculateNextPosition(
   containerWidth: number
 ): { x: number; y: number; rotation: 0 | 90 | 180 | 270 } {
 
-  if (board.length === 0) {
-    return { x: 0, y: 0, rotation: 0 }
+  if (board.length === 0) return { x: 0, y: 0, rotation: 0 }
+
+  // 1. تحديد زاوية الدوران أولاً
+  let nextRotation: 0 | 90 | 180 | 270 = 0
+  if (end === 'right') {
+    nextRotation = isDouble ? 0 : 90
+  } else {
+    nextRotation = isDouble ? 0 : 270
   }
 
-  const newTileWidth = isDouble ? TILE_W : TILE_H  
-  const newTileHeight = isDouble ? TILE_H : TILE_W 
+  // 2. حساب العرض والارتفاع بناءً على الزاوية المحددة (هذا حل مشكلة عدم الانعطاف)
+  const dims = getTileDimensions(nextRotation, isDouble)
+  const newTileWidth = dims.width
+  const newTileHeight = dims.height
+  
   const AVAILABLE_W = containerWidth / 2 - BOARD_MARGIN
 
   if (end === 'right') {
@@ -170,11 +175,7 @@ function calculateNextPosition(
       }
     }
 
-    return {
-      x: newX,
-      y: lastTile.y,
-      rotation: isDouble ? 0 : 90
-    }
+    return { x: newX, y: lastTile.y, rotation: nextRotation }
   } else {
     const firstTile = board[0]
     const firstDims = getTileDimensions(firstTile.rotation, firstTile.top === firstTile.bottom)
@@ -192,16 +193,12 @@ function calculateNextPosition(
       }
     }
 
-    return {
-      x: newX,
-      y: firstTile.y,
-      rotation: isDouble ? 0 : 270
-    }
+    return { x: newX, y: firstTile.y, rotation: nextRotation }
   }
 }
 
 // ============================================================
-// CALCULATE TILE VALUES
+// CALCULATE TILE VALUES - Fixed Matching Logic (حل مشكلة التطابق العشوائي)
 // ============================================================
 function calculateTileValues(
   tile: DominoTile,
@@ -210,16 +207,25 @@ function calculateTileValues(
 ): { top: number; bottom: number; flipped: boolean } {
 
   if (isLeft) {
-    if (tile.bottom === connectValue) {
+    // وضع القطعة على الطرف الأيسر
+    if (tile.top === connectValue) {
+      // الرقم في الأعلى يتطابق، يجب قلبه ليصبح هو الرقم المتصل في الأسفل، والرقم المكشوف في الأعلى
+      return { top: tile.bottom, bottom: tile.top, flipped: true }
+    } else if (tile.bottom === connectValue) {
+      // الرقم في الأسفل يتطابق، يبقى كما هو
       return { top: tile.top, bottom: tile.bottom, flipped: false }
     }
-    return { top: tile.bottom, bottom: tile.top, flipped: true }
   } else {
+    // وضع القطعة على الطرف الأيمن (المنطق صحيح هنا في الأصل)
     if (tile.top === connectValue) {
       return { top: tile.top, bottom: tile.bottom, flipped: false }
+    } else if (tile.bottom === connectValue) {
+      return { top: tile.bottom, bottom: tile.top, flipped: true }
     }
-    return { top: tile.bottom, bottom: tile.top, flipped: true }
   }
+  
+  // إرجاع افتراضي في حال عدم التطابق (لن يحدث بسبب canPlayTile)
+  return { top: tile.bottom, bottom: tile.top, flipped: true }
 }
 
 // ============================================================
@@ -417,7 +423,7 @@ export const getAIMove = (state: GameState, playerIndex: number, difficulty: str
 }
 
 // ============================================================
-// GAME BLOCKED (هذا القسم كان مفقوداً وتسبب في الخطأ)
+// GAME BLOCKED
 // ============================================================
 export const isGameBlocked = (state: GameState): boolean => {
   if (state.stock.length > 0) return false
