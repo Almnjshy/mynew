@@ -5,9 +5,6 @@ interface Props {
   board: BoardTile[]
 }
 
-const TILE_W = 36   // Narrow width (for doubles)
-const TILE_H = 72   // Long length (for normal tiles)
-
 export default function SnakeBoard({ board }: Props) {
   if (board.length === 0) {
     return (
@@ -17,82 +14,89 @@ export default function SnakeBoard({ board }: Props) {
     )
   }
 
-  // Calculate centering offset to keep the chain centered
-  const offset = useMemo(() => {
-    const xs = board.map(t => t.x)
-    const ys = board.map(t => t.y)
-    const minX = Math.min(...xs)
-    const maxX = Math.max(...xs)
-    const minY = Math.min(...ys)
-    const maxY = Math.max(...ys)
-    return {
-      x: -(minX + maxX) / 2,
-      y: -(minY + maxY) / 2,
+  // Group tiles by row for snake layout display
+  const rows = useMemo(() => {
+    const rowMap = new Map<number, BoardTile[]>()
+
+    for (const tile of board) {
+      // Round y to nearest row (accounting for slight variations)
+      const rowY = Math.round(tile.y / 10) * 10
+      if (!rowMap.has(rowY)) {
+        rowMap.set(rowY, [])
+      }
+      rowMap.get(rowY)!.push(tile)
     }
+
+    // Sort rows by y position
+    const sortedRows = Array.from(rowMap.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([_, tiles]) => {
+        // Sort tiles within row by x position
+        return tiles.sort((a, b) => a.x - b.x)
+      })
+
+    return sortedRows
   }, [board])
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
-      <div 
-        className="relative"
-        style={{
-          transform: `translate(${offset.x}px, ${offset.y}px)`,
-          transition: 'transform 0.3s ease-out',
-        }}
-      >
-        {board.map((tile, index) => {
-          const isDouble = tile.top === tile.bottom
-          const isVertical = tile.rotation === 0 || tile.rotation === 180
+    <div className="w-full h-full flex flex-col items-center justify-center overflow-hidden gap-1">
+      {rows.map((rowTiles, rowIndex) => (
+        <div 
+          key={rowIndex} 
+          className="flex items-center gap-1"
+          style={{ 
+            flexDirection: rowIndex % 2 === 1 ? 'row-reverse' : 'row',
+          }}
+        >
+          {rowTiles.map((tile) => {
+            const isDouble = tile.top === tile.bottom
+            const isVertical = tile.rotation === 0 || tile.rotation === 180
 
-          // Calculate dimensions based on rotation
-          const width = isVertical ? TILE_W : TILE_H
-          const height = isVertical ? TILE_H : TILE_W
+            // For display, we render tiles as they should appear
+            // Vertical tiles: tall and narrow
+            // Horizontal tiles: wide and short
+            const displayWidth = isVertical ? 36 : 72
+            const displayHeight = isVertical ? 72 : 36
 
-          return (
-            <div
-              key={tile.id}
-              className="absolute"
-              style={{
-                left: tile.x,
-                top: tile.y,
-                width: width,
-                height: height,
-                transform: `rotate(${tile.rotation}deg)`,
-                transformOrigin: 'center center',
-                transition: 'all 0.2s ease-out',
-              }}
-            >
-              <div 
-                className="w-full h-full bg-[#f5f0e6] border-2 border-[#8b7355] rounded-md flex flex-col overflow-hidden shadow-md"
+            return (
+              <div
+                key={tile.id}
+                className="flex-shrink-0"
                 style={{
-                  // For horizontal tiles (rotation 90 or 270), swap flex direction
-                  flexDirection: isVertical ? 'column' : 'row',
+                  width: displayWidth,
+                  height: displayHeight,
                 }}
               >
-                {/* First half - always shows tile.top */}
                 <div 
-                  className="flex-1 flex items-center justify-center border-b border-[#8b7355]/40 relative"
+                  className="w-full h-full bg-[#f5f0e6] border-2 border-[#8b7355] rounded-md flex overflow-hidden shadow-md"
                   style={{
-                    borderBottomWidth: isVertical ? '1px' : '0',
-                    borderRightWidth: isVertical ? '0' : '1px',
+                    flexDirection: isVertical ? 'column' : 'row',
                   }}
                 >
-                  <Dots count={tile.top} />
-                </div>
-                {/* Second half - always shows tile.bottom */}
-                <div className="flex-1 flex items-center justify-center relative">
-                  <Dots count={tile.bottom} />
+                  {/* First value */}
+                  <div 
+                    className="flex-1 flex items-center justify-center relative"
+                    style={{
+                      borderBottom: isVertical ? '1px solid rgba(139,115,85,0.4)' : 'none',
+                      borderRight: isVertical ? 'none' : '1px solid rgba(139,115,85,0.4)',
+                    }}
+                  >
+                    <Dots count={tile.top} />
+                  </div>
+                  {/* Second value */}
+                  <div className="flex-1 flex items-center justify-center relative">
+                    <Dots count={tile.bottom} />
+                  </div>
                 </div>
               </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      ))}
     </div>
   )
 }
 
-// Dot patterns for domino faces
 function Dots({ count }: { count: number }) {
   const positions: Record<number, string[]> = {
     0: [],
