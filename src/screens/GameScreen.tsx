@@ -29,6 +29,22 @@ export default function GameScreen() {
   const [bestMove, setBestMove] = useState<{ tileIndex: number; end: TileEnd } | null>(null)
   const [timerKey, setTimerKey] = useState(0)
 
+  // --- بداية الإضافة الجديدة: قياس عرض الحاوية ---
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [availableWidth, setAvailableWidth] = useState<number>(0)
+
+  useEffect(() => {
+    const updateWidth = () => {
+      if (containerRef.current) {
+        setAvailableWidth(containerRef.current.clientWidth)
+      }
+    }
+    updateWidth()
+    window.addEventListener('resize', updateWidth)
+    return () => window.removeEventListener('resize', updateWidth)
+  }, [])
+  // --- نهاية الإضافة الجديدة ---
+
   const moveCountRef = useRef(0)
   const playerDrawCountRef = useRef(0)
   const playerHasDrawnRef = useRef(false)
@@ -69,7 +85,7 @@ export default function GameScreen() {
     setTimerKey(prev => prev + 1)
   }, [playerName, playerAvatar, settings.aiCount])
 
-  // Hints
+  // Hints - تم تمرير availableWidth إليه
   useEffect(() => {
     if (!gameState || gameState.isGameOver || roundEnded) {
       setHintMessage('')
@@ -78,7 +94,8 @@ export default function GameScreen() {
     }
 
     if (gameState.currentPlayerIndex === 0 && settings.showHints) {
-      const hint = getBestMove(gameState, 0)
+      // تمرير العرض الحقيقي لنظام التلميحات
+      const hint = getBestMove(gameState, 0, availableWidth)
       if (hint) {
         setBestMove({ tileIndex: hint.tileIndex, end: hint.end })
         setHintMessage(hint.reason)
@@ -91,9 +108,9 @@ export default function GameScreen() {
       setHintMessage('')
       setBestMove(null)
     }
-  }, [gameState, settings.showHints, roundEnded])
+  }, [gameState, settings.showHints, roundEnded, availableWidth])
 
-  // AI Turn - handles ALL AI players (not just player 1)
+  // AI Turn - handles ALL AI players
   useEffect(() => {
     if (!gameState || gameState.isGameOver || roundEnded) return
     if (gameState.currentPlayerIndex === 0) return // Player's turn
@@ -105,13 +122,15 @@ export default function GameScreen() {
     setAiThinking(true)
 
     const timer = setTimeout(() => {
-      handleAITurn(currentPlayer.id)
+      // تمرير availableWidth لدور الذكاء الاصطناعي
+      handleAITurn(currentPlayer.id, availableWidth)
     }, 1500)
 
     return () => clearTimeout(timer)
-  }, [gameState, settings.difficulty, roundEnded, settings.gameMode])
+  }, [gameState, settings.difficulty, roundEnded, settings.gameMode, availableWidth])
 
-  const handleAITurn = (playerId: string) => {
+  // تم تحديث التوقيع لاستقبال containerWidth
+  const handleAITurn = (playerId: string, containerWidth: number) => {
     if (!gameState) return
     const playerIndex = gameState.players.findIndex(p => p.id === playerId)
     if (playerIndex === -1) return
@@ -140,7 +159,8 @@ export default function GameScreen() {
     const aiMove = getAIMove(gameState, playerIndex, settings.difficulty)
 
     if (aiMove) {
-      const result = playTile(gameState, playerIndex, aiMove.tileIndex, aiMove.end)
+      // تمرير containerWidth هنا لضمان انعطاف صحيح
+      const result = playTile(gameState, playerIndex, aiMove.tileIndex, aiMove.end, containerWidth)
       if (result.valid && result.newState) {
         moveCountRef.current += 1
 
@@ -232,7 +252,8 @@ export default function GameScreen() {
   const handlePlayTile = (end: TileEnd) => {
     if (selectedTile === null || !gameState || roundEnded) return
 
-    const result = playTile(gameState, 0, selectedTile, end)
+    // تمرير availableWidth هنا لتحديث حساب الانعطاف
+    const result = playTile(gameState, 0, selectedTile, end, availableWidth)
     if (result.valid && result.newState) {
       soundEngine.playTilePlace()
       moveCountRef.current += 1
@@ -372,8 +393,8 @@ export default function GameScreen() {
         </div>
       </div>
 
-      {/* Snake Board */}
-      <div className="flex-1 flex items-center justify-center px-2 py-2 overflow-hidden">
+      {/* Snake Board - تم إضافة الـ ref هنا لقياس العرض الفعلي */}
+      <div ref={containerRef} className="flex-1 flex items-center justify-center px-2 py-2 overflow-hidden">
         <SnakeBoard board={gameState.board} />
       </div>
 
