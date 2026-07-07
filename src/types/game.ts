@@ -1,141 +1,35 @@
-export type Difficulty = 'easy' | 'medium' | 'hard'
-export type GameMode = 'classic' | 'points' | 'block' | 'allFives' | 'draw'
-export type TimerMode = 'off' | 'blitz' | 'rapid' | 'custom'
+export type TileEnd = 'left' | 'right'
+export type Direction = 'right' | 'left' | 'up' | 'down'
 
-export interface GameSettings {
-  soundEnabled: boolean
-  musicEnabled: boolean
-  difficulty: Difficulty
-  showHints: boolean
-  gameMode: GameMode
-  targetScore: number
-  timerMode: TimerMode
-  customTime: number
-  aiCount: number
-}
-
-export interface GameRecord {
+export interface DominoTile {
   id: string
-  date: string
-  playerName: string
-  opponentName: string
-  result: 'win' | 'loss' | 'draw'
-  gameMode: GameMode
-  difficulty: Difficulty
-  rounds: number
-  playerScore: number
-  opponentScore: number
-  targetScore?: number
-  duration?: number
+  top: number
+  bottom: number
 }
 
-export interface LeaderboardEntry {
-  name: string
-  score: number
-  avatar: string
-  date: string
-}
-
-export interface Statistics {
-  gamesPlayed: number
-  gamesWon: number
-  gamesLost: number
-  totalScore: number
-  highestScore: number
-  totalTime: number
-  bestTime: number
-  draws: number
-  winStreak: number
-  bestWinStreak: number
-}
-
-export interface Achievement {
-  id: string
-  title: string
-  description: string
-  icon: string
-  condition: AchievementCondition
-  unlockedAt: string | null
-  progress: number
-  maxProgress: number
-  rarity: 'common' | 'rare' | 'epic' | 'legendary'
-}
-
-export interface AchievementCondition {
-  type:
-    | 'wins'
-    | 'games_played'
-    | 'streak'
-    | 'clean_win'
-    | 'crushing_win'
-    | 'moves'
-    | 'draws'
-    | 'comeback'
-  value: number
-}
-
-export interface AchievementProgress {
-  totalWins: number
-  totalGames: number
-  currentStreak: number
-  bestStreak: number
-  cleanWins: number
-  crushingWins: number
-  fastestWinMoves: number
-  totalDraws: number
-  comebacks: number
-}
-
-// ============================================================
-// MATCH STATE
-// ============================================================
-export interface MatchState {
-  round: number
-  playerScore: number
-  aiScore: number
-  targetScore: number
-  scores: { player: number; ai: number }[]
-  playerTotal: number
-  opponentTotal: number
-  isMatchOver: boolean
-  matchWinner: string | null
-}
-
-// ============================================================
-// DOMINO BOARD TILE
-// Snake Layout support
-// ============================================================
 export interface BoardTile extends DominoTile {
   x: number
   y: number
-
-  // دوران القطعة في لوحة اللعب
   rotation: 0 | 90 | 180 | 270
-
-  // هل أضيفت القطعة من الطرف الأيسر
   isLeft: boolean
-
-  // اتجاه الصف الأفقي في مسار Snake
-  runDir?: 'left' | 'right'
-
-  // قطعة التفاف تنقل السلسلة إلى صف جديد
-  isTurn?: boolean
+  startValue: number
+  endValue: number
 }
 
-// ============================================================
-// DOMINO TILE
-// ============================================================
-export interface DominoTile {
-  top: number
-  bottom: number
-  id: string
+export interface PathHead {
+  x: number
+  y: number
+  direction: Direction
+  row: number // تتبع رقم الصف الحالي للالتفاف اللانهائي الصحيح
 }
 
-export type TileEnd = 'left' | 'right'
+export interface BoardBounds {
+  minX: number
+  maxX: number
+  minY: number
+  maxY: number
+}
 
-// ============================================================
-// PLAYER
-// ============================================================
 export interface Player {
   id: string
   name: string
@@ -145,100 +39,23 @@ export interface Player {
   isAI: boolean
 }
 
-// ============================================================
-// MOVE RESULT
-// ============================================================
-export interface MoveResult {
-  valid: boolean
-  message?: string
-  newState?: GameState
-}
-
-// ============================================================
-// GAME STATE
-// ============================================================
 export interface GameState {
   board: BoardTile[]
   players: Player[]
   currentPlayerIndex: number
   stock: DominoTile[]
-
   round: number
-
   isGameOver: boolean
   winner: Player | null
-
-  lastMove: {
-    playerId: string
-    tile: DominoTile
-    end: TileEnd
-  } | null
-
+  lastMove: { playerId: string; tile: BoardTile; end: TileEnd } | null
   isBlocked: boolean
-
-  // Snake tracking
-  snakeDirection: 'right' | 'left' | 'down'
-  snakeRow: number
-  snakeCol: number
-
-  maxRow: number
-  minRow: number
-  maxCol: number
-  minCol: number
+  leftHead: PathHead
+  rightHead: PathHead
+  bounds: BoardBounds // لحل مشكلة الـ Canvas والديناميكية
 }
 
-// ============================================================
-// TIMER CONFIG
-// ============================================================
-export const TIMER_CONFIG: Record<TimerMode, { time: number; label: string }> = {
-  off: { time: 0, label: 'بدون' },
-  blitz: { time: 15, label: 'سريع' },
-  rapid: { time: 30, label: 'متوسط' },
-  custom: { time: 0, label: 'مخصص' },
+export interface MoveResult {
+  valid: boolean
+  message?: string
+  newState?: GameState
 }
-
-// ============================================================
-// GAME MODE CONFIG
-// ============================================================
-export const GAME_MODE_CONFIG: Record<GameMode, { label: string; desc: string }> = {
-  classic: {
-    label: 'كلاسيكي',
-    desc: 'الأول ينتهي يفوز',
-  },
-  points: {
-    label: 'نقاط',
-    desc: 'وصل الهدف أولاً',
-  },
-  block: {
-    label: 'بلوك',
-    desc: 'منع الخصم',
-  },
-  allFives: {
-    label: 'الخمسات',
-    desc: 'مجموع 5 يعطي نقاط',
-  },
-  draw: {
-    label: 'السحب',
-    desc: 'اسحب من المخزون',
-  },
-}
-
-export type Screen =
-  | 'title'
-  | 'menu'
-  | 'levelSelect'
-  | 'game'
-  | 'matchEnd'
-  | 'settings'
-  | 'statistics'
-  | 'achievements'
-  | 'history'
-  | 'profile'
-  | 'leaderboard'
-  | 'wifiGame'
-  | 'onlineGame'
-  | 'tournamentMenu'
-  | 'tournamentCreate'
-  | 'tournamentBracket'
-  | 'tournamentGame'
-  | 'tournamentHistory'
