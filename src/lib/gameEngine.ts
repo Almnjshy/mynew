@@ -1,22 +1,78 @@
-import { DominoTile, Player, GameState, TileEnd, MoveResult, BoardTile, Direction, PathHead, BoardBounds } from '@/types/game'
+import { DominoTile, Player, GameState, TileEnd, MoveResult, BoardTile, PathHead, BoardBounds } from '@/types/game'
 
+// ============================================================
+// CONSTANTS
+// ============================================================
 const TILE_W = 36
 const TILE_H = 72
 const GAP = 6
-const AVAILABLE_W = 360 // عرض اللوحة المسموح به قبل الالتفاف
+const BOARD_MARGIN = 40
 
-// ... دالة createDominoSet, shuffle, createPlayers, sortPlayerHand, dealTiles تظل كما هي ...
-
-export const getBoardEnds = (board: BoardTile[]): { leftValue: number; rightValue: number; leftIsDouble: boolean; rightIsDouble: boolean } => {
-  if (board.length === 0) return { leftValue: -1, rightValue: -1, leftIsDouble: false, rightIsDouble: false }
-  const leftTile = board[0]
-  const rightTile = board[board.length - 1]
-  return {
-    leftValue: leftTile.startValue,
-    rightValue: rightTile.endValue,
-    leftIsDouble: leftTile.top === leftTile.bottom,
-    rightIsDouble: rightTile.top === rightTile.bottom,
+// ============================================================
+// DECK & UTILITIES
+// ============================================================
+export const shuffle = <T>(array: T[]): T[] => {
+  const arr = [...array]
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
   }
+  return arr
+}
+
+export const createDominoSet = (): DominoTile[] => {
+  const tiles: DominoTile[] = []
+  let id = 0
+  for (let i = 0; i <= 6; i++) {
+    for (let j = i; j <= 6; j++) {
+      tiles.push({ top: i, bottom: j, id: `tile-${id++}` })
+    }
+  }
+  return shuffle(tiles)
+}
+
+export const createPlayers = (names: string[], avatars: string[]): Player[] => {
+  return names.map((name, i) => ({
+    id: `player-${i}`,
+    name,
+    avatar: avatars[i] || '/assets/avatar_ai.png',
+    hand: [],
+    score: 0,
+    isAI: i !== 0,
+  }))
+}
+
+export function sortPlayerHand(hand: DominoTile[]): DominoTile[] {
+  const normalized = hand.map(tile => {
+    if (tile.top > tile.bottom) return { ...tile, top: tile.bottom, bottom: tile.top }
+    return tile
+  })
+  return normalized.sort((a, b) => {
+    if (a.top !== b.top) return a.top - b.top
+    return a.bottom - b.bottom
+  })
+}
+
+export const dealTiles = (players: Player[], stock: DominoTile[]): { players: Player[]; stock: DominoTile[] } => {
+  const newPlayers = players.map(p => ({ ...p, hand: [] as DominoTile[] }))
+  const newStock = [...stock]
+  const tilesPerPlayer = players.length <= 2 ? 7 : players.length <= 4 ? 6 : 5
+
+  for (let i = 0; i < tilesPerPlayer; i++) {
+    for (let j = 0; j < newPlayers.length; j++) {
+      if (newStock.length > 0) newPlayers[j].hand.push(newStock.pop()!)
+    }
+  }
+  for (const player of newPlayers) player.hand = sortPlayerHand(player.hand)
+  return { players: newPlayers, stock: newStock }
+}
+
+// ============================================================
+// BOARD VALIDATION
+// ============================================================
+export const getBoardEnds = (board: BoardTile[]): { leftValue: number; rightValue: number } => {
+  if (board.length === 0) return { leftValue: -1, rightValue: -1 }
+  return { leftValue: board[0].startValue, rightValue: board[board.length - 1].endValue }
 }
 
 export const canPlayTile = (tile: DominoTile, board: BoardTile[], end: TileEnd): boolean => {
@@ -34,12 +90,10 @@ export const getValidEnds = (tile: DominoTile, board: BoardTile[]): TileEnd[] =>
   return ends
 }
 
-// تحديث ديناميكي لحدود اللوحة لتبني الـ Canvas أبعادها عليها
 function updateBounds(currentBounds: BoardBounds, x: number, y: number, isHorizontal: boolean): BoardBounds {
   const w = isHorizontal ? TILE_H : TILE_W
   const h = isHorizontal ? TILE_W : TILE_H
-  const padding = 100 // مساحة أمان إضافية حول الأطراف
-
+  const padding = 40
   return {
     minX: Math.min(currentBounds.minX, x - w / 2 - padding),
     maxX: Math.max(currentBounds.maxX, x + w / 2 + padding),
@@ -48,14 +102,19 @@ function updateBounds(currentBounds: BoardBounds, x: number, y: number, isHorizo
   }
 }
 
-// محرك الالتفاف الأفعواني الذكي (S-Shape Pattern Engine)
+// ============================================================
+// SNAKE LAYOUT ENGINE (The Core)
+// ============================================================
 function calculateNextPosition(
   state: GameState,
   tile: DominoTile,
   end: TileEnd,
-  isDouble: boolean
+  isDouble: boolean,
+  containerWidth: number
 ): { x: number; y: number; rotation: 0 | 90 | 180 | 270; newHead: PathHead } {
-  
+
+  const AVAILABLE_W = Math.max(containerWidth, 300) / 2 - BOARD_MARGIN
+
   if (state.board.length === 0) {
     return {
       x: 0,
@@ -67,54 +126,47 @@ function calculateNextPosition(
 
   const currentHead = end === 'right' ? state.rightHead : state.leftHead
   const targetTile = end === 'right' ? state.board[state.board.length - 1] : state.board[0]
-  
+
   let currentDir = currentHead.direction
   let currentRow = currentHead.row
   let nextX = currentHead.x
   let nextY = currentHead.y
   let newDir = currentDir
 
-  // حساب الدوران المتوقع وهل هي أفقية أم عمودية
+  const targetIsHorizontal = targetTile.rotation === 90 || targetTile.rotation === 270
+  const targetCurrentWidth = targetIsHorizontal ? TILE_H : TILE_W
+  const targetCurrentHeight = targetIsHorizontal ? TILE_W : TILE_H
+
   const expectedRotation = isDouble 
     ? (currentDir === 'up' || currentDir === 'down' ? 90 : 0) 
     : (currentDir === 'up' || currentDir === 'down' ? 0 : 90)
-
   const isHorizontal = expectedRotation === 90 || expectedRotation === 270
   const tileWidth = isHorizontal ? TILE_H : TILE_W
   const tileHeight = isHorizontal ? TILE_W : TILE_H
 
-  const targetCurrentWidth = (targetTile.rotation === 90 || targetTile.rotation === 270) ? TILE_H : TILE_W
-  const targetCurrentHeight = (targetTile.rotation === 90 || targetTile.rotation === 270) ? TILE_W : TILE_H
-
-  // حساب المسافة بدقة من السنتر للسنتر
   let spacing = GAP
   if (currentDir === 'right' || currentDir === 'left') {
     spacing += (targetCurrentWidth / 2) + (tileWidth / 2)
-  } else {
+    if (currentDir === 'right') nextX += spacing
+    else nextX -= spacing
+  } else if (currentDir === 'down' || currentDir === 'up') {
     spacing += (targetCurrentHeight / 2) + (tileHeight / 2)
+    if (currentDir === 'down') nextY += spacing
+    else nextY -= spacing
   }
 
-  // تطبيق الخطوة خطياً أولاً
-  if (currentDir === 'right') nextX += spacing
-  else if (currentDir === 'left') nextX -= spacing
-  else if (currentDir === 'down') nextY += spacing
-
-  // فحص حواف اللوحة للالتفاف الذكي بناءً على رقم الصف
   const outOfRightBound = currentDir === 'right' && nextX + (tileWidth / 2) > AVAILABLE_W
   const outOfLeftBound = currentDir === 'left' && nextX - (tileWidth / 2) < -AVAILABLE_W
 
   if (outOfRightBound || outOfLeftBound) {
-    currentRow += 1 // الانتقال لصف جديد
-    newDir = 'down' // النزول لأسفل خطوة واحدة
-    nextX = targetTile.x // النزول من نفس محاذاة القطعة الأخيرة تماماً لعمل زاوية قائمة
-    nextY = targetTile.y + GAP + (targetCurrentHeight / 2) + (isHorizontal ? TILE_W / 2 : TILE_H / 2)
-  } 
-  // إذا نزلنا بالفعل خطوة واحدة في اللعب السابق، نحدد الاتجاه الأفقي الجديد بناءً على كون الصف زوجي أم فردي
-  else if (currentDir === 'down') {
+    currentRow += 1
+    newDir = 'down'
+    nextX = targetTile.x 
+    nextY = targetTile.y + GAP + (targetCurrentHeight / 2) + (tileHeight / 2)
+  } else if (currentDir === 'down') {
     newDir = currentRow % 2 === 0 ? 'right' : 'left'
   }
 
-  // الدبل يوضع متعامداً دائماً
   let finalRotation = expectedRotation
   if (isDouble) {
     finalRotation = (newDir === 'right' || newDir === 'left') ? 0 : 90
@@ -128,7 +180,10 @@ function calculateNextPosition(
   }
 }
 
-export const playTile = (state: GameState, playerIndex: number, tileIndex: number, end: TileEnd): MoveResult => {
+// ============================================================
+// PLAY & SCORING
+// ============================================================
+export const playTile = (state: GameState, playerIndex: number, tileIndex: number, end: TileEnd, containerWidth: number): MoveResult => {
   const player = state.players[playerIndex]
   const tile = player.hand[tileIndex]
 
@@ -136,7 +191,7 @@ export const playTile = (state: GameState, playerIndex: number, tileIndex: numbe
   if (!canPlayTile(tile, state.board, end)) return { valid: false, message: 'حركة غير قانونية' }
 
   const isDouble = tile.top === tile.bottom
-  const position = calculateNextPosition(state, tile, end, isDouble)
+  const position = calculateNextPosition(state, tile, end, isDouble, containerWidth)
 
   let startVal: number, endVal: number
   if (state.board.length === 0) {
@@ -144,12 +199,18 @@ export const playTile = (state: GameState, playerIndex: number, tileIndex: numbe
     endVal = tile.bottom
   } else if (end === 'left') {
     const { leftValue } = getBoardEnds(state.board)
-    startVal = tile.top === leftValue ? tile.bottom : tile.top
-    endVal = leftValue 
+    if (tile.top === leftValue) {
+      startVal = tile.bottom; endVal = tile.top;
+    } else {
+      startVal = tile.top; endVal = tile.bottom;
+    }
   } else {
     const { rightValue } = getBoardEnds(state.board)
-    startVal = rightValue
-    endVal = tile.top === rightValue ? tile.bottom : tile.top
+    if (tile.top === rightValue) {
+      startVal = tile.top; endVal = tile.bottom;
+    } else {
+      startVal = tile.bottom; endVal = tile.top;
+    }
   }
 
   const playedTile: BoardTile = {
@@ -165,12 +226,13 @@ export const playTile = (state: GameState, playerIndex: number, tileIndex: numbe
   const newBoard = end === 'left' ? [playedTile, ...state.board] : [...state.board, playedTile]
   const newHand = [...player.hand]
   newHand.splice(tileIndex, 1)
-  
+
   const newPlayers = [...state.players]
   newPlayers[playerIndex] = { ...player, hand: newHand }
 
-  if (calculateAllFivesScore(newBoard) > 0) {
-    newPlayers[playerIndex].score += calculateAllFivesScore(newBoard)
+  const allFivesScore = calculateAllFivesScore(newBoard)
+  if (allFivesScore > 0) {
+    newPlayers[playerIndex].score += allFivesScore
   }
 
   const isGameOver = newHand.length === 0
@@ -179,7 +241,6 @@ export const playTile = (state: GameState, playerIndex: number, tileIndex: numbe
   let updatedRightHead = state.rightHead
 
   if (state.board.length === 0) {
-    // إعداد أولي للرؤوس باتجاهات متعاكسة أفقياً
     updatedLeftHead = { x: 0, y: 0, direction: 'left', row: 0 }
     updatedRightHead = { x: 0, y: 0, direction: 'right', row: 0 }
   } else if (end === 'left') {
@@ -188,7 +249,6 @@ export const playTile = (state: GameState, playerIndex: number, tileIndex: numbe
     updatedRightHead = position.newHead
   }
 
-  // تحديث أبعاد الـ Canvas ديناميكياً لتفادي مشكلة الـ Absolute
   const isHorizontal = position.rotation === 90 || position.rotation === 270
   const newBounds = updateBounds(state.bounds, position.x, position.y, isHorizontal)
 
@@ -209,17 +269,50 @@ export const playTile = (state: GameState, playerIndex: number, tileIndex: numbe
   }
 }
 
-// ... بقية دوال السحب والألعاب الافتراضية كما هي ...
+export const calculateScore = (hand: DominoTile[]): number => {
+  return hand.reduce((sum, tile) => sum + tile.top + tile.bottom, 0)
+}
+
+export const calculateAllFivesScore = (board: BoardTile[]): number => {
+  if (board.length === 0) return 0
+  const { leftValue, rightValue } = getBoardEnds(board)
+  const total = leftValue + rightValue
+  return total % 5 === 0 ? total : 0
+}
+
+// ============================================================
+// DRAW, TURN & AI
+// ============================================================
+export const drawFromStock = (state: GameState, playerIndex: number): GameState => {
+  if (state.stock.length === 0) return state
+  const newStock = [...state.stock]
+  const tile = newStock.pop()!
+  const newPlayers = [...state.players]
+  const newHand = [...newPlayers[playerIndex].hand, tile]
+  newPlayers[playerIndex] = { ...newPlayers[playerIndex], hand: sortPlayerHand(newHand) }
+  return { ...state, stock: newStock, players: newPlayers }
+}
 
 export const createInitialState = (playerNames: string[], playerAvatars: string[]): GameState => {
   const stock = createDominoSet()
   const players = createPlayers(playerNames, playerAvatars)
   const { players: dealtPlayers, stock: remainingStock } = dealTiles(players, stock)
 
+  let starter = 0
+  let highestDouble = -1
+  for (let i = 0; i < dealtPlayers.length; i++) {
+    for (const tile of dealtPlayers[i].hand) {
+      if (tile.top === tile.bottom && tile.top > highestDouble) {
+        highestDouble = tile.top
+        starter = i
+      }
+    }
+  }
+
   return {
     board: [],
     players: dealtPlayers,
-    currentPlayerIndex: 0,
+    currentPlayerIndex: starter,
     stock: remainingStock,
     round: 1,
     isGameOver: false,
@@ -228,6 +321,68 @@ export const createInitialState = (playerNames: string[], playerAvatars: string[
     isBlocked: false,
     leftHead: { x: 0, y: 0, direction: 'left', row: 0 },
     rightHead: { x: 0, y: 0, direction: 'right', row: 0 },
-    bounds: { minX: -400, maxX: 400, minY: -300, maxY: 300 } // حدود افتراضية أولية مريحة
+    bounds: { minX: -400, maxX: 400, minY: -300, maxY: 300 }
   }
+}
+
+export const getAIMove = (state: GameState, playerIndex: number, difficulty: string): { tileIndex: number; end: TileEnd } | null => {
+  const ai = state.players[playerIndex]
+  if (!ai || !ai.isAI) return null
+  const validMoves: { tileIndex: number; end: TileEnd; score: number }[] = []
+  for (let i = 0; i < ai.hand.length; i++) {
+    const ends = getValidEnds(ai.hand[i], state.board)
+    for (const end of ends) {
+      let score = 0; const tile = ai.hand[i]
+      if (tile.top === tile.bottom) score += 5
+      score += tile.top + tile.bottom
+      if (state.board.length > 0) {
+        const { leftValue, rightValue } = getBoardEnds(state.board)
+        const target = end === 'left' ? leftValue : rightValue
+        const otherEnd = end === 'left' ? rightValue : leftValue
+        const newTotal = (tile.top === target ? tile.bottom : tile.top) + otherEnd
+        if (newTotal % 5 === 0) score += 15
+      }
+      validMoves.push({ tileIndex: i, end, score })
+    }
+  }
+  if (validMoves.length === 0) return null
+  if (difficulty === 'easy') return validMoves[Math.floor(Math.random() * validMoves.length)]
+  validMoves.sort((a, b) => b.score - a.score)
+  if (difficulty === 'hard') return { tileIndex: validMoves[0].tileIndex, end: validMoves[0].end }
+  const topMoves = validMoves.slice(0, Math.min(3, validMoves.length))
+  return topMoves[Math.floor(Math.random() * topMoves.length)]
+}
+
+// ============================================================
+// BLOCKED STATE
+// ============================================================
+export const isGameBlocked = (state: GameState): boolean => {
+  if (state.stock.length > 0) return false
+  for (let i = 0; i < state.players.length; i++) {
+    for (const tile of state.players[i].hand) {
+      if (getValidEnds(tile, state.board).length > 0) return false
+    }
+  }
+  return true
+}
+
+export const getBlockedWinner = (state: GameState): Player | null => {
+  let winner = state.players[0]; let minScore = calculateScore(winner.hand); let tie = false
+  for (let i = 1; i < state.players.length; i++) {
+    const score = calculateScore(state.players[i].hand)
+    if (score < minScore) { minScore = score; winner = state.players[i]; tie = false } 
+    else if (score === minScore) tie = true
+  }
+  return tie ? null : winner
+}
+
+export const canPlayerPlay = (state: GameState, playerIndex: number): boolean => {
+  for (const tile of state.players[playerIndex].hand) {
+    if (getValidEnds(tile, state.board).length > 0) return true
+  }
+  return false
+}
+
+export const skipTurn = (state: GameState): GameState => {
+  return { ...state, currentPlayerIndex: (state.currentPlayerIndex + 1) % state.players.length }
 }
