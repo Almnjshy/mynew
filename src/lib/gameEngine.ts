@@ -1,11 +1,14 @@
 import { DominoTile, Player, GameState, TileEnd, MoveResult, BoardTile } from '@/types/game'
 
 // ============================================================
-// CONSTANTS
+// CONSTANTS - Board Layout
 // ============================================================
-const TILE_W = 40   // Width of narrow side (half tile)
-const TILE_H = 80   // Height/length of tile
-const CHAIN_GAP = 0 // No gap - tiles touch each other
+const TILE_W = 36      // Width of narrow side (double tile width)
+const TILE_H = 72      // Length of tile (normal tile length)
+const GAP = 2          // Small gap between tiles
+const BOARD_MARGIN = 60 // Margin from screen edges
+const SCREEN_W = 360   // Mobile screen width (approximate)
+const SCREEN_H = 600   // Mobile screen height (approximate)
 
 // ============================================================
 // DECK CREATION
@@ -84,22 +87,50 @@ export const dealTiles = (players: Player[], stock: DominoTile[]): { players: Pl
 }
 
 // ============================================================
-// BOARD ENDS - FIXED: Correctly identifies exposed values
+// BOARD ENDS - Get the two open ends of the chain
 // ============================================================
 export const getBoardEnds = (board: BoardTile[]): { leftValue: number; rightValue: number } => {
   if (board.length === 0) return { leftValue: -1, rightValue: -1 }
 
-  // Left end: exposed value of first tile (the side NOT connected to the next tile)
-  // For a BoardTile, the side facing OUT is determined by isLeft flag
+  // The chain is: [leftmost] ... [rightmost]
+  // leftValue = the OPEN value on the leftmost tile (the side NOT connected to next tile)
+  // rightValue = the OPEN value on the rightmost tile (the side NOT connected to prev tile)
+
   const leftTile = board[0]
-  const leftValue = leftTile.isLeft ? leftTile.top : leftTile.bottom
-
-  // Right end: exposed value of last tile
-  // FIXED: Was using leftTile instead of rightTile
   const rightTile = board[board.length - 1]
-  const rightValue = rightTile.isLeft ? rightTile.bottom : rightTile.top
 
-  return { leftValue, rightValue }
+  // For the leftmost tile:
+  // - If connected on its RIGHT side, the OPEN side is LEFT
+  // - The LEFT side value depends on rotation
+  // 
+  // A vertical tile (rotation 0): top is up, bottom is down
+  // When placed horizontally (rotation 90): top becomes left, bottom becomes right
+
+  // For a BoardTile, we store the DISPLAY values after flip/rotation
+  // The "connected" side is the one facing the chain
+  // The "open" side is the one facing outward
+
+  // leftTile.isLeft means this tile was placed on the LEFT end
+  // So its connected side is its RIGHT side
+  // Its open side is its LEFT side
+
+  // For a tile placed on the LEFT end:
+  // The matching number should be at the RIGHT (connected to chain)
+  // The open number is at the LEFT
+
+  // After calculateTileValues:
+  // For LEFT placement: matching number at bottom (visually right when rotated 90°)
+  //                    open number at top (visually left when rotated 90°)
+  // So: leftValue = tile.top (the open side)
+
+  // For RIGHT placement: matching number at top (visually left when rotated 90°)
+  //                      open number at bottom (visually right when rotated 90°)
+  // So: rightValue = tile.bottom (the open side)
+
+  return {
+    leftValue: leftTile.top,
+    rightValue: rightTile.bottom,
+  }
 }
 
 // ============================================================
@@ -121,32 +152,39 @@ export const getValidEnds = (tile: DominoTile, board: BoardTile[]): TileEnd[] =>
 }
 
 // ============================================================
-// CHAIN LAYOUT - PROPER DOMINO ALGORITHM
+// SNAKE LAYOUT ENGINE - Calculate positions for chain layout
 // ============================================================
 
-// Track chain state for proper snake layout
-interface ChainState {
+interface LayoutState {
   x: number
   y: number
-  direction: 'right' | 'left' | 'up' | 'down'
+  direction: 'right' | 'left' | 'down'
   row: number
 }
 
-function getInitialChainState(): ChainState {
+function getInitialLayoutState(): LayoutState {
   return { x: 0, y: 0, direction: 'right', row: 0 }
 }
 
-function shouldTurn(state: ChainState, screenWidth: number = 800): boolean {
-  const margin = TILE_H * 3
-  if (state.direction === 'right' && state.x + TILE_H > screenWidth - margin) return true
-  if (state.direction === 'left' && state.x - TILE_H < margin) return true
+function getTileLength(isDouble: boolean): number {
+  return isDouble ? TILE_W : TILE_H
+}
+
+function shouldTurn(state: LayoutState, nextTileLength: number): boolean {
+  const margin = BOARD_MARGIN
+  if (state.direction === 'right') {
+    return state.x + nextTileLength + TILE_H + GAP > SCREEN_W / 2 - margin
+  }
+  if (state.direction === 'left') {
+    return state.x - nextTileLength - TILE_H - GAP < -(SCREEN_W / 2) + margin
+  }
   return false
 }
 
-function turnDirection(state: ChainState): ChainState {
+function turnDirection(state: LayoutState): LayoutState {
   const newRow = state.row + 1
   if (state.direction === 'right') {
-    return { x: state.x, y: state.y + TILE_H, direction: 'down', row: newRow }
+    return { x: state.x, y: state.y + TILE_W + GAP, direction: 'down', row: newRow }
   } else if (state.direction === 'down') {
     if (state.row % 2 === 1) {
       return { x: state.x, y: state.y, direction: 'right', row: newRow }
@@ -154,61 +192,86 @@ function turnDirection(state: ChainState): ChainState {
       return { x: state.x, y: state.y, direction: 'left', row: newRow }
     }
   } else if (state.direction === 'left') {
-    return { x: state.x, y: state.y + TILE_H, direction: 'down', row: newRow }
+    return { x: state.x, y: state.y + TILE_W + GAP, direction: 'down', row: newRow }
   }
   return state
 }
 
-// Calculate rotation for a tile
-function calculateRotation(direction: 'right' | 'left' | 'up' | 'down', isDouble: boolean): 0 | 90 | 180 | 270 {
+function calculateRotation(direction: 'right' | 'left' | 'down', isDouble: boolean): 0 | 90 | 180 | 270 {
   if (isDouble) {
-    switch (direction) {
-      case 'right':
-      case 'left':
-        return 0
-      case 'down':
-      case 'up':
-        return 90
-    }
-  } else {
-    switch (direction) {
-      case 'right': return 90
-      case 'left': return 270
-      case 'down': return 0
-      case 'up': return 180
-    }
+    // Double tiles are always vertical (rotation 0)
+    // They act as connection points
+    return 0
   }
-  return 0
+
+  // Normal tiles: the divider line should be perpendicular to direction of play
+  // When playing right/left: tile is horizontal (rotation 90)
+  // When playing down: tile is vertical (rotation 0)
+  switch (direction) {
+    case 'right': return 90
+    case 'left': return 270
+    case 'down': return 0
+  }
 }
 
 // ============================================================
-// FIXED: calculateTileValues - Correct matching logic
+// CALCULATE TILE VALUES - Proper matching logic
 // ============================================================
+/**
+ * When placing a tile on the board:
+ * 
+ * For LEFT end placement:
+ * - The matching number goes to the BOTTOM (visually right side when rotated 90°)
+ * - The open number goes to the TOP (visually left side when rotated 90°)
+ * - Example: board ends with [6|4] on left, play [1|6] → becomes [6|1] on board
+ *   So: top=6 (open), bottom=1 (connected to chain... wait that's wrong)
+ *   
+ *   Actually: The chain goes: [new] - [existing]
+ *   The new tile's matching number should face the existing chain
+ *   If existing left end is 6, and we play [1|6]:
+ *   - The 6 should connect to the existing 6
+ *   - So 6 goes to the side facing the chain (bottom when placed on left)
+ *   - 1 goes to the open side (top)
+ *   - Result: top=1, bottom=6
+ *   
+ *   But wait, when rotated 90° (horizontal):
+ *   - top becomes left
+ *   - bottom becomes right
+ *   - So visually: [1|6] with 1 on left (open), 6 on right (connected)
+ *   
+ *   The leftValue of the board would be 1 (the open side)
+ */
 function calculateTileValues(
   tile: DominoTile,
   connectValue: number,
   isLeft: boolean
 ): { top: number; bottom: number; flipped: boolean } {
-  // For LEFT end: the matching number goes to BOTTOM (connects to previous tile's TOP)
-  // For RIGHT end: the matching number goes to TOP (connects to previous tile's BOTTOM)
 
   if (isLeft) {
-    // Left extension: matching number at BOTTOM
+    // Placing on LEFT end
+    // Matching number goes to BOTTOM (connected side, faces the chain)
+    // Open number goes to TOP
     if (tile.bottom === connectValue) {
+      // tile.bottom matches → keep as is: top=top (open), bottom=bottom (connected)
       return { top: tile.top, bottom: tile.bottom, flipped: false }
     }
+    // tile.top matches → flip: top=bottom (open), bottom=top (connected)
     return { top: tile.bottom, bottom: tile.top, flipped: true }
   } else {
-    // Right extension: matching number at TOP
+    // Placing on RIGHT end
+    // Matching number goes to TOP (connected side, faces the chain)
+    // Open number goes to BOTTOM
     if (tile.top === connectValue) {
+      // tile.top matches → keep as is: top=top (connected), bottom=bottom (open)
       return { top: tile.top, bottom: tile.bottom, flipped: false }
     }
+    // tile.bottom matches → flip: top=bottom (connected), bottom=top (open)
     return { top: tile.bottom, bottom: tile.top, flipped: true }
   }
 }
 
 // ============================================================
-// PLAY TILE - FIXED: Correct board insertion and value assignment
+// PLAY TILE - Complete rewrite with proper board logic
 // ============================================================
 export const playTile = (state: GameState, playerIndex: number, tileIndex: number, end: TileEnd): MoveResult => {
   const player = state.players[playerIndex]
@@ -234,29 +297,55 @@ export const playTile = (state: GameState, playerIndex: number, tileIndex: numbe
   } else if (end === 'left') {
     // Extend left
     const firstTile = state.board[0]
-    const connectValue = firstTile.isLeft ? firstTile.top : firstTile.bottom
+    const connectValue = firstTile.top  // The open value on the left end
 
     const values = calculateTileValues(tile, connectValue, true)
     tileTop = values.top
     tileBottom = values.bottom
 
-    const tileLength = isDouble ? TILE_W : TILE_H
-    x = firstTile.x - tileLength - CHAIN_GAP
+    // Calculate position
+    const tileLength = getTileLength(isDouble)
+    x = firstTile.x - tileLength - GAP
     y = firstTile.y
-    rotation = calculateRotation('left', isDouble)
+
+    // Determine rotation based on position relative to previous tile
+    // If previous tile is at same y, we're going horizontal
+    // If y differs, we might be on a turn
+    if (firstTile.y === 0 && state.board.length > 1) {
+      // Check direction from second tile
+      const secondTile = state.board[1]
+      if (secondTile.x > firstTile.x) {
+        rotation = calculateRotation('left', isDouble)
+      } else {
+        rotation = calculateRotation('right', isDouble)
+      }
+    } else {
+      rotation = calculateRotation('left', isDouble)
+    }
   } else {
     // Extend right
     const lastTile = state.board[state.board.length - 1]
-    const connectValue = lastTile.isLeft ? lastTile.bottom : lastTile.top
+    const connectValue = lastTile.bottom  // The open value on the right end
 
     const values = calculateTileValues(tile, connectValue, false)
     tileTop = values.top
     tileBottom = values.bottom
 
-    const tileLength = isDouble ? TILE_W : TILE_H
-    x = lastTile.x + tileLength + CHAIN_GAP
+    const tileLength = getTileLength(isDouble)
+    x = lastTile.x + tileLength + GAP
     y = lastTile.y
-    rotation = calculateRotation('right', isDouble)
+
+    // Similar logic for right end
+    if (lastTile.y === 0 && state.board.length > 1) {
+      const prevTile = state.board[state.board.length - 2]
+      if (prevTile.x < lastTile.x) {
+        rotation = calculateRotation('right', isDouble)
+      } else {
+        rotation = calculateRotation('left', isDouble)
+      }
+    } else {
+      rotation = calculateRotation('right', isDouble)
+    }
   }
 
   const playedTile: BoardTile = {
@@ -269,7 +358,7 @@ export const playTile = (state: GameState, playerIndex: number, tileIndex: numbe
     bottom: tileBottom,
   }
 
-  // FIXED: Use unshift for left, push for right
+  // Add to board: unshift for left, push for right
   const newBoard = end === 'left'
     ? [playedTile, ...state.board]
     : [...state.board, playedTile]
@@ -400,7 +489,6 @@ export const getAIMove = (state: GameState, playerIndex: number, difficulty: str
   for (let i = 0; i < ai.hand.length; i++) {
     const ends = getValidEnds(ai.hand[i], state.board)
     for (const end of ends) {
-      // Simulate the move to calculate score
       let score = 0
       const tile = ai.hand[i]
 
@@ -442,7 +530,7 @@ export const getAIMove = (state: GameState, playerIndex: number, difficulty: str
 }
 
 // ============================================================
-// GAME BLOCKED - FIXED: Proper blocked game detection
+// GAME BLOCKED - Proper blocked game detection
 // ============================================================
 export const isGameBlocked = (state: GameState): boolean => {
   // If stock is not empty, game is not blocked (players can draw)
