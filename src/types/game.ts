@@ -62,7 +62,15 @@ export interface Achievement {
 }
 
 export interface AchievementCondition {
-  type: 'wins' | 'games_played' | 'streak' | 'clean_win' | 'crushing_win' | 'moves' | 'draws' | 'comeback'
+  type:
+    | 'wins'
+    | 'games_played'
+    | 'streak'
+    | 'clean_win'
+    | 'crushing_win'
+    | 'moves'
+    | 'draws'
+    | 'comeback'
   value: number
 }
 
@@ -79,7 +87,7 @@ export interface AchievementProgress {
 }
 
 // ============================================================
-// FIXED: MatchState now includes isMatchOver and matchWinner
+// MATCH STATE
 // ============================================================
 export interface MatchState {
   round: number
@@ -94,15 +102,29 @@ export interface MatchState {
 }
 
 // ============================================================
-// BoardTile with position and rotation for snake layout
+// DOMINO BOARD TILE
+// Snake Layout support
 // ============================================================
 export interface BoardTile extends DominoTile {
   x: number
   y: number
-  rotation: number
+
+  // دوران القطعة في لوحة اللعب
+  rotation: 0 | 90 | 180 | 270
+
+  // هل أضيفت القطعة من الطرف الأيسر
   isLeft: boolean
+
+  // اتجاه الصف الأفقي في مسار Snake
+  runDir?: 'left' | 'right'
+
+  // قطعة التفاف تنقل السلسلة إلى صف جديد
+  isTurn?: boolean
 }
 
+// ============================================================
+// DOMINO TILE
+// ============================================================
 export interface DominoTile {
   top: number
   bottom: number
@@ -111,6 +133,9 @@ export interface DominoTile {
 
 export type TileEnd = 'left' | 'right'
 
+// ============================================================
+// PLAYER
+// ============================================================
 export interface Player {
   id: string
   name: string
@@ -121,7 +146,7 @@ export interface Player {
 }
 
 // ============================================================
-// FIXED: MoveResult now properly defined
+// MOVE RESULT
 // ============================================================
 export interface MoveResult {
   valid: boolean
@@ -129,25 +154,42 @@ export interface MoveResult {
   newState?: GameState
 }
 
+// ============================================================
+// GAME STATE
+// ============================================================
 export interface GameState {
   board: BoardTile[]
   players: Player[]
   currentPlayerIndex: number
   stock: DominoTile[]
+
   round: number
+
   isGameOver: boolean
   winner: Player | null
-  lastMove: { playerId: string; tile: DominoTile; end: TileEnd } | null
+
+  lastMove: {
+    playerId: string
+    tile: DominoTile
+    end: TileEnd
+  } | null
+
   isBlocked: boolean
+
+  // Snake tracking
   snakeDirection: 'right' | 'left' | 'down'
   snakeRow: number
   snakeCol: number
+
   maxRow: number
   minRow: number
   maxCol: number
   minCol: number
 }
 
+// ============================================================
+// TIMER CONFIG
+// ============================================================
 export const TIMER_CONFIG: Record<TimerMode, { time: number; label: string }> = {
   off: { time: 0, label: 'بدون' },
   blitz: { time: 15, label: 'سريع' },
@@ -155,17 +197,48 @@ export const TIMER_CONFIG: Record<TimerMode, { time: number; label: string }> = 
   custom: { time: 0, label: 'مخصص' },
 }
 
+// ============================================================
+// GAME MODE CONFIG
+// ============================================================
 export const GAME_MODE_CONFIG: Record<GameMode, { label: string; desc: string }> = {
-  classic: { label: 'كلاسيكي', desc: 'الأول ينتهي يفوز' },
-  points: { label: 'نقاط', desc: 'وصل الهدف أولاً' },
-  block: { label: 'بلوك', desc: 'منع الخصم' },
-  allFives: { label: 'الخمسات', desc: 'مجموع 5 يعطي نقاط' },
-  draw: { label: 'السحب', desc: 'اسحب من المخزون' },
+  classic: {
+    label: 'كلاسيكي',
+    desc: 'الأول ينتهي يفوز',
+  },
+  points: {
+    label: 'نقاط',
+    desc: 'وصل الهدف أولاً',
+  },
+  block: {
+    label: 'بلوك',
+    desc: 'منع الخصم',
+  },
+  allFives: {
+    label: 'الخمسات',
+    desc: 'مجموع 5 يعطي نقاط',
+  },
+  draw: {
+    label: 'السحب',
+    desc: 'اسحب من المخزون',
+  },
 }
 
-export type Screen = 
-  | 'title' | 'menu' | 'levelSelect' | 'game' | 'matchEnd' 
-  | 'settings' | 'statistics' | 'achievements' | 'history' 
-  | 'profile' | 'leaderboard' | 'wifiGame' | 'onlineGame'
-  | 'tournamentMenu' | 'tournamentCreate' | 'tournamentBracket' 
-  | 'tournamentGame' | 'tournamentHistory'
+export type Screen =
+  | 'title'
+  | 'menu'
+  | 'levelSelect'
+  | 'game'
+  | 'matchEnd'
+  | 'settings'
+  | 'statistics'
+  | 'achievements'
+  | 'history'
+  | 'profile'
+  | 'leaderboard'
+  | 'wifiGame'
+  | 'onlineGame'
+  | 'tournamentMenu'
+  | 'tournamentCreate'
+  | 'tournamentBracket'
+  | 'tournamentGame'
+  | 'tournamentHistory'
