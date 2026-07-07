@@ -98,6 +98,18 @@
   box-shadow: 0 0 12px rgba(212, 168, 67, 0.6);
 }
 
+/* NEW: Highlight style for hints */
+.domino-tile.highlight {
+  border-color: #4ade80;
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+  animation: pulse-green 1.5s infinite;
+}
+
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 0 8px rgba(74, 222, 128, 0.5); }
+  50% { box-shadow: 0 0 16px rgba(74, 222, 128, 0.8); }
+}
+
 .domino-tile .half {
   flex: 1;
   display: flex;
@@ -129,7 +141,7 @@
 .dot-bl { bottom: 6px; left: 6px; }
 .dot-br { bottom: 6px; right: 6px; }
 
-/* Game Board - Snake Layout */
+/* Game Board - Chain Layout */
 .game-board {
   width: 100%;
   flex: 1;
@@ -141,6 +153,7 @@
   overflow: hidden;
 }
 
+/* Chain layout for domino board */
 .board-chain {
   display: flex;
   flex-wrap: wrap;
@@ -151,28 +164,7 @@
   max-height: 100%;
 }
 
-/* Snake Layout for Domino Board */
-.snake-board {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
-  gap: 4px;
-  width: 100%;
-  max-height: 100%;
-  overflow: hidden;
-  padding: 8px;
-}
-
-.snake-row {
-  display: flex;
-  gap: 4px;
-  justify-content: center;
-  width: 100%;
-}
-
-.snake-row:nth-child(even) {
-  flex-direction: row-reverse;
-}
-
+/* Player Hand */
 .player-hand {
   display: flex;
   gap: 8px;
@@ -218,6 +210,11 @@
 
 .game-btn-secondary:active {
   background: rgba(255,255,255,0.2);
+}
+
+.game-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .screen-container {
