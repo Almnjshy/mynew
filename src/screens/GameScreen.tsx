@@ -7,7 +7,7 @@ import {
 } from '@/lib/gameEngine'
 import { getBestMove, getHintMessage, shouldDraw } from '@/lib/hintEngine'
 import { GameState, DominoTile, TileEnd, TIMER_CONFIG, BoardTile } from '@/types/game'
-import { ArrowLeft, RotateCcw, Trophy, Lightbulb, Users, User } from 'lucide-react'
+import { ArrowLeft, RotateCcw, Lightbulb } from 'lucide-react'
 import TimerBar from '@/components/TimerBar'
 import SnakeBoard from '@/components/SnakeBoard'
 import DominoTileComponent from '@/components/DominoTile'
@@ -29,9 +29,8 @@ export default function GameScreen() {
   const [bestMove, setBestMove] = useState<{ tileIndex: number; end: TileEnd } | null>(null)
   const [timerKey, setTimerKey] = useState(0)
 
-  // --- تصحيح القياس الحاسم ---
+  // --- 🔧 إصلاح مهلة القياس (ضمان قيمة أولية آمنة) ---
   const containerRef = useRef<HTMLDivElement>(null)
-  // تبدأ بـ قيمة آمنة (عرض الشاشة) بدلاً من 0
   const [availableWidth, setAvailableWidth] = useState<number>(
     typeof window !== 'undefined' ? window.innerWidth - 60 : 600
   )
@@ -152,7 +151,6 @@ export default function GameScreen() {
     const aiMove = getAIMove(gameState, playerIndex, settings.difficulty)
 
     if (aiMove) {
-      // تمرير عرض الحاوية!
       const result = playTile(gameState, playerIndex, aiMove.tileIndex, aiMove.end, containerWidth)
       if (result.valid && result.newState) {
         moveCountRef.current += 1
@@ -307,7 +305,6 @@ export default function GameScreen() {
 
   return (
     <div className="screen-container table-bg">
-      {/* Header */}
       <div className="w-full flex items-center justify-between px-4 py-2">
         <button onClick={handleExit} className="text-white/60 p-2"><ArrowLeft size={24} /></button>
         <div className="text-center">
@@ -323,7 +320,6 @@ export default function GameScreen() {
         <div className="w-full px-4 mb-1"><TimerBar key={timerKey} duration={timeLimit} onTimeUp={handleTimeUp} isActive={isPlayerTurn} /></div>
       )}
 
-      {/* Opponents */}
       <div className="w-full px-4 py-1">
         <div className="flex items-center justify-center gap-3 flex-wrap">
           {gameState.players.slice(1).map((opponent, idx) => (
@@ -337,7 +333,7 @@ export default function GameScreen() {
         </div>
       </div>
 
-      {/* Snake Board - تم وضع ref هنا لقياس الحجم */}
+      {/* 🔧 تم وضع الـ ref هنا لضمان القياس الصحيح عند التحميل الأول */}
       <div ref={containerRef} className="flex-1 flex items-center justify-center px-2 py-2 overflow-hidden">
         <SnakeBoard board={gameState.board} />
       </div>
