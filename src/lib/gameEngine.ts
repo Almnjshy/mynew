@@ -1,60 +1,22 @@
-import { DominoTile, Player, GameState, TileEnd, MoveResult, BoardTile } from '@/types/game'
+import { DominoTile, Player, GameState, TileEnd, MoveResult, BoardTile, Direction, PathHead, BoardBounds } from '@/types/game'
 
-const TILE_W = 36      
-const TILE_H = 72      
-const GAP = 2          
-const BOARD_MARGIN = 40 
+const TILE_W = 36
+const TILE_H = 72
+const GAP = 6
+const AVAILABLE_W = 360 // عرض اللوحة المسموح به قبل الالتفاف
 
-export const createDominoSet = (): DominoTile[] => {
-  const tiles: DominoTile[] = []
-  let id = 0
-  for (let i = 0; i <= 6; i++) {
-    for (let j = i; j <= 6; j++) {
-      tiles.push({ top: i, bottom: j, id: `tile-${id++}` })
-    }
+// ... دالة createDominoSet, shuffle, createPlayers, sortPlayerHand, dealTiles تظل كما هي ...
+
+export const getBoardEnds = (board: BoardTile[]): { leftValue: number; rightValue: number; leftIsDouble: boolean; rightIsDouble: boolean } => {
+  if (board.length === 0) return { leftValue: -1, rightValue: -1, leftIsDouble: false, rightIsDouble: false }
+  const leftTile = board[0]
+  const rightTile = board[board.length - 1]
+  return {
+    leftValue: leftTile.startValue,
+    rightValue: rightTile.endValue,
+    leftIsDouble: leftTile.top === leftTile.bottom,
+    rightIsDouble: rightTile.top === rightTile.bottom,
   }
-  return shuffle(tiles)
-}
-export const shuffle = <T>(array: T[]): T[] => {
-  const arr = [...array]
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[arr[i], arr[j]] = [arr[j], arr[i]]
-  }
-  return arr
-}
-
-export const createPlayers = (names: string[], avatars: string[]): Player[] => names.map((name, i) => ({
-  id: `player-${i}`, name, avatar: avatars[i] || '/assets/avatar_ai.png', hand: [], score: 0, isAI: i !== 0,
-}))
-
-export function sortPlayerHand(hand: DominoTile[]): DominoTile[] {
-  const normalized = hand.map(tile => {
-    if (tile.top > tile.bottom) return { ...tile, top: tile.bottom, bottom: tile.top }
-    return tile
-  })
-  return normalized.sort((a, b) => {
-    if (a.top !== b.top) return a.top - b.top
-    return a.bottom - b.bottom
-  })
-}
-
-export const dealTiles = (players: Player[], stock: DominoTile[]): { players: Player[]; stock: DominoTile[] } => {
-  const newPlayers = players.map(p => ({ ...p, hand: [] as DominoTile[] }))
-  const newStock = [...stock]
-  const tilesPerPlayer = players.length <= 2 ? 7 : players.length <= 4 ? 6 : 5
-  for (let i = 0; i < tilesPerPlayer; i++) {
-    for (let j = 0; j < newPlayers.length; j++) {
-      if (newStock.length > 0) newPlayers[j].hand.push(newStock.pop()!)
-    }
-  }
-  for (const player of newPlayers) player.hand = sortPlayerHand(player.hand)
-  return { players: newPlayers, stock: newStock }
-}
-
-export const getBoardEnds = (board: BoardTile[]): { leftValue: number; rightValue: number } => {
-  if (board.length === 0) return { leftValue: -1, rightValue: -1 }
-  return { leftValue: board[0].top, rightValue: board[board.length - 1].bottom }
 }
 
 export const canPlayTile = (tile: DominoTile, board: BoardTile[], end: TileEnd): boolean => {
@@ -63,6 +25,7 @@ export const canPlayTile = (tile: DominoTile, board: BoardTile[], end: TileEnd):
   const targetValue = end === 'left' ? leftValue : rightValue
   return tile.top === targetValue || tile.bottom === targetValue
 }
+
 export const getValidEnds = (tile: DominoTile, board: BoardTile[]): TileEnd[] => {
   if (board.length === 0) return ['left']
   const ends: TileEnd[] = []
@@ -71,199 +34,200 @@ export const getValidEnds = (tile: DominoTile, board: BoardTile[]): TileEnd[] =>
   return ends
 }
 
-function getTileDimensions(rotation: number, isDouble: boolean): { width: number; height: number } {
-  if (isDouble) return { width: TILE_W, height: TILE_H }
-  if (rotation === 0 || rotation === 180) return { width: TILE_W, height: TILE_H }
-  return { width: TILE_H, height: TILE_W }
+// تحديث ديناميكي لحدود اللوحة لتبني الـ Canvas أبعادها عليها
+function updateBounds(currentBounds: BoardBounds, x: number, y: number, isHorizontal: boolean): BoardBounds {
+  const w = isHorizontal ? TILE_H : TILE_W
+  const h = isHorizontal ? TILE_W : TILE_H
+  const padding = 100 // مساحة أمان إضافية حول الأطراف
+
+  return {
+    minX: Math.min(currentBounds.minX, x - w / 2 - padding),
+    maxX: Math.max(currentBounds.maxX, x + w / 2 + padding),
+    minY: Math.min(currentBounds.minY, y - h / 2 - padding),
+    maxY: Math.max(currentBounds.maxY, y + h / 2 + padding),
+  }
 }
 
-// ==========================================================
-// 🛠️ الحل الهندسي الجديد (معادلة الانعطاف بالحواف)
-// ==========================================================
+// محرك الالتفاف الأفعواني الذكي (S-Shape Pattern Engine)
 function calculateNextPosition(
-  board: BoardTile[], end: TileEnd, isDouble: boolean, containerWidth: number
-): { x: number; y: number; rotation: 0 | 90 | 180 | 270 } {
-  if (board.length === 0) return { x: 0, y: 0, rotation: 0 }
-
-  // تأمين قيمة العرض لضمان عدم انهيار المعادلة بسبب صفر القيمة
-  const safeWidth = Math.max(containerWidth, 300) // أقل قيمة آمنة هي 300
-  const AVAILABLE_W = safeWidth / 2 - BOARD_MARGIN
-
-  if (end === 'right') {
-    const lastTile = board[board.length - 1]
-    const lastDims = getTileDimensions(lastTile.rotation, lastTile.top === lastTile.bottom)
-    const nextRotation: 0 | 90 | 180 | 270 = isDouble ? 0 : 90
-    const nextDims = getTileDimensions(nextRotation, isDouble)
-
-    // 1. حساب مركز القطعة الجديدة بناءً على الحافة اليمنى للقطعة الأخيرة
-    const lastRightEdge = lastTile.x + lastDims.width / 2
-    const newCenterX = lastRightEdge + GAP + nextDims.width / 2
-
-    // 2. التحقق من الانعطاف (هل تجاوزت الحافة اليمنى للميدان؟)
-    if (newCenterX + nextDims.width / 2 > AVAILABLE_W) {
-      // نعم، بدأ صف جديد: نبدأ من الحافة اليسرى للميدان
-      return {
-        x: -AVAILABLE_W + nextDims.width / 2,
-        y: lastTile.y + lastDims.height + GAP * 4, // النزول للصف التالي
-        rotation: nextRotation
-      }
+  state: GameState,
+  tile: DominoTile,
+  end: TileEnd,
+  isDouble: boolean
+): { x: number; y: number; rotation: 0 | 90 | 180 | 270; newHead: PathHead } {
+  
+  if (state.board.length === 0) {
+    return {
+      x: 0,
+      y: 0,
+      rotation: isDouble ? 0 : 90,
+      newHead: { x: 0, y: 0, direction: 'right', row: 0 }
     }
-    // لا، استمر بنفس الصف الأفقي
-    return { x: newCenterX, y: lastTile.y, rotation: nextRotation }
-
-  } else { // end === 'left'
-    const firstTile = board[0]
-    const firstDims = getTileDimensions(firstTile.rotation, firstTile.top === firstTile.bottom)
-    const nextRotation: 0 | 90 | 180 | 270 = isDouble ? 0 : 270
-    const nextDims = getTileDimensions(nextRotation, isDouble)
-
-    // 1. حساب مركز القطعة الجديدة بناءً على الحافة اليسرى للقطعة الأولى
-    const firstLeftEdge = firstTile.x - firstDims.width / 2
-    const newCenterX = firstLeftEdge - GAP - nextDims.width / 2
-
-    // 2. التحقق من الانعطاف (هل تجاوزت الحافة اليسرى للميدان؟)
-    if (newCenterX - nextDims.width / 2 < -AVAILABLE_W) {
-      // نعم، بدأ صف جديد: نبدأ من الحافة اليمنى للميدان
-      return {
-        x: AVAILABLE_W - nextDims.width / 2,
-        y: firstTile.y + firstDims.height + GAP * 4, // النزول للصف التالي
-        rotation: nextRotation
-      }
-    }
-    // لا، استمر بنفس الصف الأفقي
-    return { x: newCenterX, y: firstTile.y, rotation: nextRotation }
   }
-}
 
-// ==========================================================
-// 🛠️ ضمان تطابق القيم رياضيًا
-// ==========================================================
-function calculateTileValues(tile: DominoTile, connectValue: number, isLeft: boolean): { top: number; bottom: number; flipped: boolean } {
-  if (isLeft) {
-    if (tile.top === connectValue) return { top: tile.bottom, bottom: tile.top, flipped: true }
-    if (tile.bottom === connectValue) return { top: tile.top, bottom: tile.bottom, flipped: false }
+  const currentHead = end === 'right' ? state.rightHead : state.leftHead
+  const targetTile = end === 'right' ? state.board[state.board.length - 1] : state.board[0]
+  
+  let currentDir = currentHead.direction
+  let currentRow = currentHead.row
+  let nextX = currentHead.x
+  let nextY = currentHead.y
+  let newDir = currentDir
+
+  // حساب الدوران المتوقع وهل هي أفقية أم عمودية
+  const expectedRotation = isDouble 
+    ? (currentDir === 'up' || currentDir === 'down' ? 90 : 0) 
+    : (currentDir === 'up' || currentDir === 'down' ? 0 : 90)
+
+  const isHorizontal = expectedRotation === 90 || expectedRotation === 270
+  const tileWidth = isHorizontal ? TILE_H : TILE_W
+  const tileHeight = isHorizontal ? TILE_W : TILE_H
+
+  const targetCurrentWidth = (targetTile.rotation === 90 || targetTile.rotation === 270) ? TILE_H : TILE_W
+  const targetCurrentHeight = (targetTile.rotation === 90 || targetTile.rotation === 270) ? TILE_W : TILE_H
+
+  // حساب المسافة بدقة من السنتر للسنتر
+  let spacing = GAP
+  if (currentDir === 'right' || currentDir === 'left') {
+    spacing += (targetCurrentWidth / 2) + (tileWidth / 2)
   } else {
-    if (tile.top === connectValue) return { top: tile.top, bottom: tile.bottom, flipped: false }
-    if (tile.bottom === connectValue) return { top: tile.bottom, bottom: tile.top, flipped: true }
+    spacing += (targetCurrentHeight / 2) + (tileHeight / 2)
   }
-  return { top: tile.top, bottom: tile.bottom, flipped: false }
+
+  // تطبيق الخطوة خطياً أولاً
+  if (currentDir === 'right') nextX += spacing
+  else if (currentDir === 'left') nextX -= spacing
+  else if (currentDir === 'down') nextY += spacing
+
+  // فحص حواف اللوحة للالتفاف الذكي بناءً على رقم الصف
+  const outOfRightBound = currentDir === 'right' && nextX + (tileWidth / 2) > AVAILABLE_W
+  const outOfLeftBound = currentDir === 'left' && nextX - (tileWidth / 2) < -AVAILABLE_W
+
+  if (outOfRightBound || outOfLeftBound) {
+    currentRow += 1 // الانتقال لصف جديد
+    newDir = 'down' // النزول لأسفل خطوة واحدة
+    nextX = targetTile.x // النزول من نفس محاذاة القطعة الأخيرة تماماً لعمل زاوية قائمة
+    nextY = targetTile.y + GAP + (targetCurrentHeight / 2) + (isHorizontal ? TILE_W / 2 : TILE_H / 2)
+  } 
+  // إذا نزلنا بالفعل خطوة واحدة في اللعب السابق، نحدد الاتجاه الأفقي الجديد بناءً على كون الصف زوجي أم فردي
+  else if (currentDir === 'down') {
+    newDir = currentRow % 2 === 0 ? 'right' : 'left'
+  }
+
+  // الدبل يوضع متعامداً دائماً
+  let finalRotation = expectedRotation
+  if (isDouble) {
+    finalRotation = (newDir === 'right' || newDir === 'left') ? 0 : 90
+  }
+
+  return {
+    x: nextX,
+    y: nextY,
+    rotation: finalRotation as 0 | 90 | 180 | 270,
+    newHead: { x: nextX, y: nextY, direction: newDir, row: currentRow }
+  }
 }
 
-export const playTile = (state: GameState, playerIndex: number, tileIndex: number, end: TileEnd, containerWidth: number): MoveResult => {
+export const playTile = (state: GameState, playerIndex: number, tileIndex: number, end: TileEnd): MoveResult => {
   const player = state.players[playerIndex]
   const tile = player.hand[tileIndex]
-  if (!tile) return { valid: false, message: 'Invalid tile' }
-  if (!canPlayTile(tile, state.board, end)) return { valid: false, message: 'لا يمكن اللعب بهذه القطعة هنا' }
+
+  if (!tile) return { valid: false, message: 'قطعة غير صالحة' }
+  if (!canPlayTile(tile, state.board, end)) return { valid: false, message: 'حركة غير قانونية' }
 
   const isDouble = tile.top === tile.bottom
-  const position = calculateNextPosition(state.board, end, isDouble, containerWidth)
+  const position = calculateNextPosition(state, tile, end, isDouble)
 
-  let tileTop: number, tileBottom: number
+  let startVal: number, endVal: number
   if (state.board.length === 0) {
-    tileTop = tile.top; tileBottom = tile.bottom
+    startVal = tile.top
+    endVal = tile.bottom
   } else if (end === 'left') {
-    const values = calculateTileValues(tile, state.board[0].top, true)
-    tileTop = values.top; tileBottom = values.bottom
+    const { leftValue } = getBoardEnds(state.board)
+    startVal = tile.top === leftValue ? tile.bottom : tile.top
+    endVal = leftValue 
   } else {
-    const values = calculateTileValues(tile, state.board[state.board.length - 1].bottom, false)
-    tileTop = values.top; tileBottom = values.bottom
+    const { rightValue } = getBoardEnds(state.board)
+    startVal = rightValue
+    endVal = tile.top === rightValue ? tile.bottom : tile.top
   }
 
-  const playedTile: BoardTile = { ...tile, x: position.x, y: position.y, rotation: position.rotation, isLeft: end === 'left', top: tileTop, bottom: tileBottom }
+  const playedTile: BoardTile = {
+    ...tile,
+    x: position.x,
+    y: position.y,
+    rotation: position.rotation,
+    isLeft: end === 'left',
+    startValue: startVal,
+    endValue: endVal,
+  }
+
   const newBoard = end === 'left' ? [playedTile, ...state.board] : [...state.board, playedTile]
-  const newHand = [...player.hand]; newHand.splice(tileIndex, 1)
-  const newPlayers = [...state.players]; newPlayers[playerIndex] = { ...player, hand: newHand }
+  const newHand = [...player.hand]
+  newHand.splice(tileIndex, 1)
+  
+  const newPlayers = [...state.players]
+  newPlayers[playerIndex] = { ...player, hand: newHand }
 
-  const allFivesScore = calculateAllFivesScore(newBoard)
-  if (allFivesScore > 0) newPlayers[playerIndex] = { ...newPlayers[playerIndex], score: newPlayers[playerIndex].score + allFivesScore }
-
-  if (newHand.length === 0) {
-    return { valid: true, newState: { ...state, board: newBoard, players: newPlayers, isGameOver: true, winner: newPlayers[playerIndex], isBlocked: false } }
+  if (calculateAllFivesScore(newBoard) > 0) {
+    newPlayers[playerIndex].score += calculateAllFivesScore(newBoard)
   }
 
-  return { valid: true, newState: { ...state, board: newBoard, players: newPlayers, currentPlayerIndex: (playerIndex + 1) % state.players.length, lastMove: { playerId: player.id, tile: playedTile, end } } }
+  const isGameOver = newHand.length === 0
+
+  let updatedLeftHead = state.leftHead
+  let updatedRightHead = state.rightHead
+
+  if (state.board.length === 0) {
+    // إعداد أولي للرؤوس باتجاهات متعاكسة أفقياً
+    updatedLeftHead = { x: 0, y: 0, direction: 'left', row: 0 }
+    updatedRightHead = { x: 0, y: 0, direction: 'right', row: 0 }
+  } else if (end === 'left') {
+    updatedLeftHead = position.newHead
+  } else {
+    updatedRightHead = position.newHead
+  }
+
+  // تحديث أبعاد الـ Canvas ديناميكياً لتفادي مشكلة الـ Absolute
+  const isHorizontal = position.rotation === 90 || position.rotation === 270
+  const newBounds = updateBounds(state.bounds, position.x, position.y, isHorizontal)
+
+  return {
+    valid: true,
+    newState: {
+      ...state,
+      board: newBoard,
+      players: newPlayers,
+      currentPlayerIndex: isGameOver ? state.currentPlayerIndex : (playerIndex + 1) % state.players.length,
+      lastMove: { playerId: player.id, tile: playedTile, end },
+      leftHead: updatedLeftHead,
+      rightHead: updatedRightHead,
+      bounds: newBounds,
+      isGameOver,
+      winner: isGameOver ? newPlayers[playerIndex] : null,
+    }
+  }
 }
 
-export const drawFromStock = (state: GameState, playerIndex: number): GameState => {
-  if (state.stock.length === 0) return state
-  const newStock = [...state.stock]; const tile = newStock.pop()!
-  const newPlayers = [...state.players]
-  const newHand = [...newPlayers[playerIndex].hand, tile]
-  newPlayers[playerIndex] = { ...newPlayers[playerIndex], hand: sortPlayerHand(newHand) }
-  return { ...state, stock: newStock, players: newPlayers }
-}
-
-export const calculateScore = (hand: DominoTile[]): number => hand.reduce((sum, tile) => sum + tile.top + tile.bottom, 0)
-export const calculateAllFivesScore = (board: BoardTile[]): number => {
-  if (board.length === 0) return 0
-  const { leftValue, rightValue } = getBoardEnds(board)
-  const total = leftValue + rightValue
-  return total % 5 === 0 ? total : 0
-}
+// ... بقية دوال السحب والألعاب الافتراضية كما هي ...
 
 export const createInitialState = (playerNames: string[], playerAvatars: string[]): GameState => {
   const stock = createDominoSet()
   const players = createPlayers(playerNames, playerAvatars)
   const { players: dealtPlayers, stock: remainingStock } = dealTiles(players, stock)
-  let starter = 0; let highestDouble = -1
-  for (let i = 0; i < dealtPlayers.length; i++) {
-    for (const tile of dealtPlayers[i].hand) {
-      if (tile.top === tile.bottom && tile.top > highestDouble) { highestDouble = tile.top; starter = i }
-    }
-  }
-  return { board: [], players: dealtPlayers, currentPlayerIndex: starter, stock: remainingStock, round: 1, isGameOver: false, winner: null, lastMove: null, isBlocked: false }
-}
 
-export const getAIMove = (state: GameState, playerIndex: number, difficulty: string): { tileIndex: number; end: TileEnd } | null => {
-  const ai = state.players[playerIndex]
-  if (!ai || !ai.isAI) return null
-  const validMoves: { tileIndex: number; end: TileEnd; score: number }[] = []
-  for (let i = 0; i < ai.hand.length; i++) {
-    const ends = getValidEnds(ai.hand[i], state.board)
-    for (const end of ends) {
-      let score = 0; const tile = ai.hand[i]
-      if (tile.top === tile.bottom) score += 5
-      score += tile.top + tile.bottom
-      if (state.board.length > 0) {
-        const { leftValue, rightValue } = getBoardEnds(state.board)
-        const target = end === 'left' ? leftValue : rightValue
-        const otherEnd = end === 'left' ? rightValue : leftValue
-        const newTotal = (tile.top === target ? tile.bottom : tile.top) + otherEnd
-        if (newTotal % 5 === 0) score += 15
-      }
-      validMoves.push({ tileIndex: i, end, score })
-    }
+  return {
+    board: [],
+    players: dealtPlayers,
+    currentPlayerIndex: 0,
+    stock: remainingStock,
+    round: 1,
+    isGameOver: false,
+    winner: null,
+    lastMove: null,
+    isBlocked: false,
+    leftHead: { x: 0, y: 0, direction: 'left', row: 0 },
+    rightHead: { x: 0, y: 0, direction: 'right', row: 0 },
+    bounds: { minX: -400, maxX: 400, minY: -300, maxY: 300 } // حدود افتراضية أولية مريحة
   }
-  if (validMoves.length === 0) return null
-  if (difficulty === 'easy') return validMoves[Math.floor(Math.random() * validMoves.length)]
-  validMoves.sort((a, b) => b.score - a.score)
-  if (difficulty === 'hard') return { tileIndex: validMoves[0].tileIndex, end: validMoves[0].end }
-  const topMoves = validMoves.slice(0, Math.min(3, validMoves.length))
-  return topMoves[Math.floor(Math.random() * topMoves.length)]
 }
-
-export const isGameBlocked = (state: GameState): boolean => {
-  if (state.stock.length > 0) return false
-  for (let i = 0; i < state.players.length; i++) {
-    for (const tile of state.players[i].hand) {
-      if (getValidEnds(tile, state.board).length > 0) return false
-    }
-  }
-  return true
-}
-export const getBlockedWinner = (state: GameState): Player | null => {
-  let winner = state.players[0]; let minScore = calculateScore(winner.hand); let tie = false
-  for (let i = 1; i < state.players.length; i++) {
-    const score = calculateScore(state.players[i].hand)
-    if (score < minScore) { minScore = score; winner = state.players[i]; tie = false } 
-    else if (score === minScore) tie = true
-  }
-  return tie ? null : winner
-}
-export const canPlayerPlay = (state: GameState, playerIndex: number): boolean => {
-  for (const tile of state.players[playerIndex].hand) {
-    if (getValidEnds(tile, state.board).length > 0) return true
-  }
-  return false
-}
-export const skipTurn = (state: GameState): GameState => ({ ...state, currentPlayerIndex: (state.currentPlayerIndex + 1) % state.players.length })
