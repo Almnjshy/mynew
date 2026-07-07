@@ -1,4 +1,5 @@
 import { BoardTile } from '@/types/game'
+import { useMemo } from 'react'
 
 interface Props {
   board: BoardTile[]
@@ -13,60 +14,113 @@ export default function SnakeBoard({ board }: Props) {
     )
   }
 
+  // Calculate the bounding box of all tiles to center them
+  const { offsetX, offsetY, boardWidth, boardHeight } = useMemo(() => {
+    if (board.length === 0) {
+      return { offsetX: 0, offsetY: 0, boardWidth: 0, boardHeight: 0 }
+    }
+
+    let minX = Infinity
+    let maxX = -Infinity
+    let minY = Infinity
+    let maxY = -Infinity
+
+    for (const tile of board) {
+      const isDouble = tile.top === tile.bottom
+      const isVertical = tile.rotation === 0 || tile.rotation === 180
+      const tileW = isVertical ? 36 : 72
+      const tileH = isVertical ? 72 : 36
+
+      const left = tile.x - tileW / 2
+      const right = tile.x + tileW / 2
+      const top = tile.y - tileH / 2
+      const bottom = tile.y + tileH / 2
+
+      if (left < minX) minX = left
+      if (right > maxX) maxX = right
+      if (top < minY) minY = top
+      if (bottom > maxY) maxY = bottom
+    }
+
+    return {
+      offsetX: -minX + 20,  // Add padding
+      offsetY: -minY + 20,  // Add padding
+      boardWidth: maxX - minX + 40,  // Add padding on both sides
+      boardHeight: maxY - minY + 40, // Add padding on both sides
+    }
+  }, [board])
+
+  const containerStyle: React.CSSProperties = {
+    position: 'relative',
+    width: `${Math.max(boardWidth, 300)}px`,
+    height: `${Math.max(boardHeight, 300)}px`,
+    minWidth: '100%',
+    minHeight: '100%',
+  }
+
   return (
-    <div className="w-full h-full flex items-center justify-center overflow-auto p-4">
-      <div 
-        className="relative" 
-        style={{ 
-          width: '100%', 
-          height: '100%',
-          maxWidth: '600px',
-          maxHeight: '600px'
-        }}
-      >
+    <div className="w-full h-full flex items-center justify-center overflow-auto">
+      <div style={containerStyle}>
         {board.map((tile) => {
           const isDouble = tile.top === tile.bottom
           const isVertical = tile.rotation === 0 || tile.rotation === 180
-          const displayWidth = isVertical ? 36 : 72
-          const displayHeight = isVertical ? 72 : 36
+          const tileW = isVertical ? 36 : 72
+          const tileH = isVertical ? 72 : 36
 
-          // Convert from center-based coordinates to absolute positioning
-          // 300 is half the container width (centering offset)
-          const left = tile.x + 300 - displayWidth / 2
-          const top = tile.y + 300 - displayHeight / 2
+          // Convert center coordinates to top-left positioning with offset
+          const left = tile.x + offsetX - tileW / 2
+          const top = tile.y + offsetY - tileH / 2
 
           return (
             <div
               key={tile.id}
-              className="absolute"
               style={{
+                position: 'absolute',
                 left: `${left}px`,
                 top: `${top}px`,
-                width: displayWidth,
-                height: displayHeight,
+                width: `${tileW}px`,
+                height: `${tileH}px`,
                 transform: `rotate(${tile.rotation}deg)`,
                 transformOrigin: 'center center',
+                zIndex: 1,
               }}
             >
               <div 
-                className="w-full h-full bg-[#f5f0e6] border-2 border-[#8b7355] rounded-md flex overflow-hidden shadow-md"
                 style={{
+                  width: '100%',
+                  height: '100%',
+                  backgroundColor: '#f5f0e6',
+                  border: '2px solid #8b7355',
+                  borderRadius: '6px',
+                  display: 'flex',
                   flexDirection: isVertical ? 'column' : 'row',
+                  overflow: 'hidden',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
                 }}
               >
                 {/* First value */}
                 <div 
-                  className="flex-1 flex items-center justify-center relative"
                   style={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    position: 'relative',
                     borderBottom: isVertical ? '1px solid rgba(139,115,85,0.4)' : 'none',
-                    borderRight: isVertical ? 'none' : '1px solid rgba(139,115,85,0.4)',
+                    borderRight: !isVertical ? '1px solid rgba(139,115,85,0.4)' : 'none',
                   }}
                 >
                   <Dots count={tile.top} />
                 </div>
                 
                 {/* Second value */}
-                <div className="flex-1 flex items-center justify-center relative">
+                <div style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative',
+                }}>
                   <Dots count={tile.bottom} />
                 </div>
               </div>
@@ -79,33 +133,55 @@ export default function SnakeBoard({ board }: Props) {
 }
 
 function Dots({ count }: { count: number }) {
-  const positions: Record<number, string[]> = {
+  // ترتيب النقاط حسب الرقم
+  const positions: Record<number, Array<{ top?: string; left?: string; right?: string; bottom?: string; transform?: string }>> = {
     0: [],
-    1: ['c'],
-    2: ['tl','br'],
-    3: ['tl','c','br'],
-    4: ['tl','tr','bl','br'],
-    5: ['tl','tr','c','bl','br'],
-    6: ['tl','tr','ml','mr','bl','br']
-  }
-
-  const posMap: Record<string, React.CSSProperties> = {
-    'tl': { top: '15%', left: '15%' },
-    'tr': { top: '15%', right: '15%' },
-    'ml': { top: '50%', left: '15%', transform: 'translateY(-50%)' },
-    'mr': { top: '50%', right: '15%', transform: 'translateY(-50%)' },
-    'c':  { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' },
-    'bl': { bottom: '15%', left: '15%' },
-    'br': { bottom: '15%', right: '15%' },
+    1: [{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }],
+    2: [
+      { top: '20%', right: '20%' },
+      { bottom: '20%', left: '20%' }
+    ],
+    3: [
+      { top: '20%', right: '20%' },
+      { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' },
+      { bottom: '20%', left: '20%' }
+    ],
+    4: [
+      { top: '20%', left: '20%' },
+      { top: '20%', right: '20%' },
+      { bottom: '20%', left: '20%' },
+      { bottom: '20%', right: '20%' }
+    ],
+    5: [
+      { top: '20%', left: '20%' },
+      { top: '20%', right: '20%' },
+      { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' },
+      { bottom: '20%', left: '20%' },
+      { bottom: '20%', right: '20%' }
+    ],
+    6: [
+      { top: '20%', left: '20%' },
+      { top: '20%', right: '20%' },
+      { top: '50%', left: '20%', transform: 'translateY(-50%)' },
+      { top: '50%', right: '20%', transform: 'translateY(-50%)' },
+      { bottom: '20%', left: '20%' },
+      { bottom: '20%', right: '20%' }
+    ]
   }
 
   return (
-    <div className="relative w-full h-full">
-      {(positions[count] || []).map((p, i) => (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      {(positions[count] || []).map((style, i) => (
         <div 
-          key={i} 
-          className="absolute w-[18%] h-[18%] bg-[#1a1a2e] rounded-full"
-          style={posMap[p]} 
+          key={i}
+          style={{
+            position: 'absolute',
+            width: '16%',
+            height: '16%',
+            backgroundColor: '#1a1a2e',
+            borderRadius: '50%',
+            ...style,
+          }}
         />
       ))}
     </div>
