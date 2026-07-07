@@ -29,9 +29,12 @@ export default function GameScreen() {
   const [bestMove, setBestMove] = useState<{ tileIndex: number; end: TileEnd } | null>(null)
   const [timerKey, setTimerKey] = useState(0)
 
-  // --- بداية الإضافة الجديدة: قياس عرض الحاوية ---
+  // --- تصحيح القياس الحاسم ---
   const containerRef = useRef<HTMLDivElement>(null)
-  const [availableWidth, setAvailableWidth] = useState<number>(0)
+  // تبدأ بـ قيمة آمنة (عرض الشاشة) بدلاً من 0
+  const [availableWidth, setAvailableWidth] = useState<number>(
+    typeof window !== 'undefined' ? window.innerWidth - 60 : 600
+  )
 
   useEffect(() => {
     const updateWidth = () => {
@@ -43,7 +46,6 @@ export default function GameScreen() {
     window.addEventListener('resize', updateWidth)
     return () => window.removeEventListener('resize', updateWidth)
   }, [])
-  // --- نهاية الإضافة الجديدة ---
 
   const moveCountRef = useRef(0)
   const playerDrawCountRef = useRef(0)
@@ -55,7 +57,6 @@ export default function GameScreen() {
     return TIMER_CONFIG[settings.timerMode].time
   }, [settings.timerMode, settings.customTime])
 
-  // Generate AI names based on count
   const getAINames = useCallback((count: number): string[] => {
     const names = ['الكمبيوتر', 'الذكي', 'المحارب', 'الأسطورة', 'البطل']
     return names.slice(0, count)
@@ -65,7 +66,6 @@ export default function GameScreen() {
     return Array(count).fill('/assets/avatar_ai.png')
   }, [])
 
-  // Initialize game
   useEffect(() => {
     const aiCount = Math.min(Math.max(settings.aiCount || 1, 1), 4)
     const aiNames = getAINames(aiCount)
@@ -85,16 +85,14 @@ export default function GameScreen() {
     setTimerKey(prev => prev + 1)
   }, [playerName, playerAvatar, settings.aiCount])
 
-  // Hints - تم تمرير availableWidth إليه
+  // تمرير availableWidth للتلميحات
   useEffect(() => {
     if (!gameState || gameState.isGameOver || roundEnded) {
       setHintMessage('')
       setBestMove(null)
       return
     }
-
     if (gameState.currentPlayerIndex === 0 && settings.showHints) {
-      // تمرير العرض الحقيقي لنظام التلميحات
       const hint = getBestMove(gameState, 0, availableWidth)
       if (hint) {
         setBestMove({ tileIndex: hint.tileIndex, end: hint.end })
@@ -110,10 +108,10 @@ export default function GameScreen() {
     }
   }, [gameState, settings.showHints, roundEnded, availableWidth])
 
-  // AI Turn - handles ALL AI players
+  // تمرير availableWidth لدور الذكاء الاصطناعي
   useEffect(() => {
     if (!gameState || gameState.isGameOver || roundEnded) return
-    if (gameState.currentPlayerIndex === 0) return // Player's turn
+    if (gameState.currentPlayerIndex === 0) return
 
     const currentPlayer = gameState.players[gameState.currentPlayerIndex]
     if (!currentPlayer || !currentPlayer.isAI) return
@@ -122,14 +120,12 @@ export default function GameScreen() {
     setAiThinking(true)
 
     const timer = setTimeout(() => {
-      // تمرير availableWidth لدور الذكاء الاصطناعي
       handleAITurn(currentPlayer.id, availableWidth)
     }, 1500)
 
     return () => clearTimeout(timer)
   }, [gameState, settings.difficulty, roundEnded, settings.gameMode, availableWidth])
 
-  // تم تحديث التوقيع لاستقبال containerWidth
   const handleAITurn = (playerId: string, containerWidth: number) => {
     if (!gameState) return
     const playerIndex = gameState.players.findIndex(p => p.id === playerId)
@@ -137,7 +133,6 @@ export default function GameScreen() {
 
     const currentPlayer = gameState.players[playerIndex]
 
-    // Check if game is blocked
     if (isGameBlocked(gameState)) {
       const blockedWinner = getBlockedWinner(gameState)
       handleRoundEnd(blockedWinner?.id === 'player-0')
@@ -145,7 +140,6 @@ export default function GameScreen() {
       return
     }
 
-    // Block mode: skip if can't play
     if (settings.gameMode === 'block' && !canPlayerPlay(gameState, playerIndex)) {
       const newState = skipTurn(gameState)
       setGameState(newState)
@@ -155,29 +149,21 @@ export default function GameScreen() {
       return
     }
 
-    // Get AI move
     const aiMove = getAIMove(gameState, playerIndex, settings.difficulty)
 
     if (aiMove) {
-      // تمرير containerWidth هنا لضمان انعطاف صحيح
+      // تمرير عرض الحاوية!
       const result = playTile(gameState, playerIndex, aiMove.tileIndex, aiMove.end, containerWidth)
       if (result.valid && result.newState) {
         moveCountRef.current += 1
-
         if (settings.gameMode === 'allFives') {
           const gained = result.newState.players[playerIndex].score - (gameState.players[playerIndex]?.score || 0)
-          if (gained > 0) {
-            setMessage(`${currentPlayer.name} حصل على ${gained} نقطة!`)
-          }
+          if (gained > 0) setMessage(`${currentPlayer.name} حصل على ${gained} نقطة!`)
         }
-
         setGameState(result.newState)
-        if (result.newState.isGameOver) {
-          handleRoundEnd(result.newState.winner?.id === 'player-0')
-        }
+        if (result.newState.isGameOver) handleRoundEnd(result.newState.winner?.id === 'player-0')
       }
     } else {
-      // Can't play - try to draw
       if (settings.gameMode === 'draw' && gameState.stock.length > 0) {
         let newState = drawFromStock(gameState, playerIndex)
         let drawCount = 1
@@ -210,7 +196,6 @@ export default function GameScreen() {
     sessionStorage.setItem('lastRoundPoints', String(finalPlayerScore))
     sessionStorage.setItem('movesCount', String(moveCountRef.current))
 
-    // Update statistics
     updateStatistics({
       gamesPlayed: 1,
       gamesWon: isWin ? 1 : 0,
@@ -219,7 +204,6 @@ export default function GameScreen() {
       highestScore: finalPlayerScore,
     })
 
-    // Check achievements
     const newlyUnlocked = checkAndUnlockAchievements({
       totalGames: statistics.gamesPlayed + 1,
       totalWins: statistics.gamesWon + (isWin ? 1 : 0),
@@ -241,18 +225,14 @@ export default function GameScreen() {
 
   const handleTileClick = (index: number) => {
     if (!gameState || gameState.currentPlayerIndex !== 0 || roundEnded || aiThinking) return
-    if (selectedTile === index) {
-      setSelectedTile(null)
-      return
-    }
+    if (selectedTile === index) { setSelectedTile(null); return }
     setSelectedTile(index)
     soundEngine.playClick()
   }
 
   const handlePlayTile = (end: TileEnd) => {
     if (selectedTile === null || !gameState || roundEnded) return
-
-    // تمرير availableWidth هنا لتحديث حساب الانعطاف
+    // تمرير availableWidth الحقيقي
     const result = playTile(gameState, 0, selectedTile, end, availableWidth)
     if (result.valid && result.newState) {
       soundEngine.playTilePlace()
@@ -261,10 +241,7 @@ export default function GameScreen() {
       setSelectedTile(null)
       setMessage('')
       setTimerKey(prev => prev + 1)
-
-      if (result.newState.isGameOver) {
-        handleRoundEnd(result.newState.winner?.id === 'player-0')
-      }
+      if (result.newState.isGameOver) handleRoundEnd(result.newState.winner?.id === 'player-0')
     } else {
       soundEngine.playInvalid()
       setMessage(result.message || 'لا يمكن اللعب بهذه القطعة')
@@ -278,7 +255,6 @@ export default function GameScreen() {
       soundEngine.playInvalid()
       return
     }
-
     const newState = drawFromStock(gameState, 0)
     setGameState(newState)
     playerDrawCountRef.current += 1
@@ -321,11 +297,7 @@ export default function GameScreen() {
   }
 
   if (!gameState) {
-    return (
-      <div className="screen-container table-bg">
-        <div className="text-white/60">جاري التحميل...</div>
-      </div>
-    )
+    return <div className="screen-container table-bg"><div className="text-white/60">جاري التحميل...</div></div>
   }
 
   const player = gameState.players[0]
@@ -337,136 +309,64 @@ export default function GameScreen() {
     <div className="screen-container table-bg">
       {/* Header */}
       <div className="w-full flex items-center justify-between px-4 py-2">
-        <button onClick={handleExit} className="text-white/60 p-2">
-          <ArrowLeft size={24} />
-        </button>
+        <button onClick={handleExit} className="text-white/60 p-2"><ArrowLeft size={24} /></button>
         <div className="text-center">
           <div className="text-yellow-400 font-bold text-sm">
-            {settings.gameMode === 'classic' ? 'كلاسيك' : 
-             settings.gameMode === 'points' ? 'نقاط' :
-             settings.gameMode === 'block' ? 'حظر' :
-             settings.gameMode === 'allFives' ? 'الخمسات' : 'سحب'}
+            {settings.gameMode === 'classic' ? 'كلاسيك' : settings.gameMode === 'points' ? 'نقاط' : settings.gameMode === 'block' ? 'حظر' : settings.gameMode === 'allFives' ? 'الخمسات' : 'سحب'}
           </div>
-          <div className="text-white/40 text-xs">
-            {gameState.players.length} لاعبين
-          </div>
+          <div className="text-white/40 text-xs">{gameState.players.length} لاعبين</div>
         </div>
-        <button onClick={() => {}} className="text-white/60 p-2">
-          <RotateCcw size={24} />
-        </button>
+        <button onClick={() => {}} className="text-white/60 p-2"><RotateCcw size={24} /></button>
       </div>
 
-      {/* Timer */}
       {timeLimit > 0 && isPlayerTurn && (
-        <div className="w-full px-4 mb-1">
-          <TimerBar 
-            key={timerKey}
-            duration={timeLimit} 
-            onTimeUp={handleTimeUp} 
-            isActive={isPlayerTurn} 
-          />
-        </div>
+        <div className="w-full px-4 mb-1"><TimerBar key={timerKey} duration={timeLimit} onTimeUp={handleTimeUp} isActive={isPlayerTurn} /></div>
       )}
 
-      {/* Opponents Info */}
+      {/* Opponents */}
       <div className="w-full px-4 py-1">
         <div className="flex items-center justify-center gap-3 flex-wrap">
           {gameState.players.slice(1).map((opponent, idx) => (
-            <div 
-              key={opponent.id}
-              className={`flex items-center gap-2 px-3 py-1 rounded-full ${
-                gameState.currentPlayerIndex === idx + 1 
-                  ? 'bg-yellow-500/20 border border-yellow-500/50' 
-                  : 'bg-white/5'
-              }`}
-            >
-              <div className="w-6 h-6 rounded-full bg-white/10 overflow-hidden">
-                <img src={opponent.avatar} alt="" className="w-full h-full object-cover" />
-              </div>
+            <div key={opponent.id} className={`flex items-center gap-2 px-3 py-1 rounded-full ${gameState.currentPlayerIndex === idx + 1 ? 'bg-yellow-500/20 border border-yellow-500/50' : 'bg-white/5'}`}>
+              <div className="w-6 h-6 rounded-full bg-white/10 overflow-hidden"><img src={opponent.avatar} alt="" className="w-full h-full object-cover" /></div>
               <span className="text-white/70 text-xs">{opponent.name}</span>
               <span className="text-white/40 text-xs">({opponent.hand.length})</span>
-              {gameState.currentPlayerIndex === idx + 1 && aiThinking && (
-                <span className="text-yellow-400 text-xs animate-pulse">يفكر...</span>
-              )}
+              {gameState.currentPlayerIndex === idx + 1 && aiThinking && <span className="text-yellow-400 text-xs animate-pulse">يفكر...</span>}
             </div>
           ))}
         </div>
       </div>
 
-      {/* Snake Board - تم إضافة الـ ref هنا لقياس العرض الفعلي */}
+      {/* Snake Board - تم وضع ref هنا لقياس الحجم */}
       <div ref={containerRef} className="flex-1 flex items-center justify-center px-2 py-2 overflow-hidden">
         <SnakeBoard board={gameState.board} />
       </div>
 
-      {/* Message */}
-      {message && (
-        <div className="text-center px-4 py-1 text-sm font-medium text-yellow-400">
-          {message}
-        </div>
-      )}
-
-      {/* Hints */}
+      {message && <div className="text-center px-4 py-1 text-sm font-medium text-yellow-400">{message}</div>}
       {hintMessage && settings.showHints && isPlayerTurn && (
-        <div className="text-center px-4 py-1">
-          <span className="text-white/50 text-xs flex items-center justify-center gap-1">
-            <Lightbulb size={12} />
-            {hintMessage}
-          </span>
-        </div>
+        <div className="text-center px-4 py-1"><span className="text-white/50 text-xs flex items-center justify-center gap-1"><Lightbulb size={12} />{hintMessage}</span></div>
       )}
 
-      {/* Player Info */}
       <div className="flex items-center gap-3 px-4 py-2">
-        <div className="w-10 h-10 rounded-full bg-yellow-500/20 overflow-hidden border-2 border-yellow-500">
-          <img src={player.avatar} alt="" className="w-full h-full object-cover" />
-        </div>
-        <div className="text-right">
-          <div className="text-yellow-400 font-medium text-sm">{player.name}</div>
-          <div className="text-white/40 text-xs">{player.hand.length} قطعة</div>
-        </div>
-        {settings.gameMode === 'allFives' && (
-          <div className="mr-auto text-yellow-400 font-bold">
-            {player.score} نقطة
-          </div>
-        )}
+        <div className="w-10 h-10 rounded-full bg-yellow-500/20 overflow-hidden border-2 border-yellow-500"><img src={player.avatar} alt="" className="w-full h-full object-cover" /></div>
+        <div className="text-right"><div className="text-yellow-400 font-medium text-sm">{player.name}</div><div className="text-white/40 text-xs">{player.hand.length} قطعة</div></div>
+        {settings.gameMode === 'allFives' && <div className="mr-auto text-yellow-400 font-bold">{player.score} نقطة</div>}
       </div>
 
-      {/* Player Hand */}
       <div className="w-full px-4 pb-2">
         <div className="player-hand justify-center">
           {player.hand.map((tile, index) => {
             const validEnds = getValidEnds(tile, gameState.board)
             const isSelected = selectedTile === index
             const isHinted = bestMove?.tileIndex === index
-
             return (
               <div key={tile.id} className="relative">
-                <button
-                  onClick={() => handleTileClick(index)}
-                  disabled={!isPlayerTurn || roundEnded}
-                  className={`transition-transform ${
-                    isSelected ? 'scale-110 -translate-y-2' : ''
-                  } ${!isPlayerTurn || roundEnded ? 'opacity-50' : ''}`}
-                >
-                  <DominoTileComponent 
-                    tile={tile} 
-                    selected={isSelected}
-                    highlight={isHinted}
-                    size={player.hand.length > 10 ? 'sm' : player.hand.length > 7 ? 'md' : 'lg'}
-                  />
+                <button onClick={() => handleTileClick(index)} disabled={!isPlayerTurn || roundEnded} className={`transition-transform ${isSelected ? 'scale-110 -translate-y-2' : ''} ${!isPlayerTurn || roundEnded ? 'opacity-50' : ''}`}>
+                  <DominoTileComponent tile={tile} selected={isSelected} highlight={isHinted} size={player.hand.length > 10 ? 'sm' : player.hand.length > 7 ? 'md' : 'lg'} />
                 </button>
-
                 {isSelected && validEnds.length > 0 && (
                   <div className="absolute -top-8 left-1/2 -translate-x-1/2 flex gap-1">
-                    {validEnds.map((end) => (
-                      <button
-                        key={end}
-                        onClick={() => handlePlayTile(end)}
-                        className="bg-yellow-500 text-black text-xs px-2 py-1 rounded-full font-bold"
-                      >
-                        {end === 'left' ? '←' : '→'}
-                      </button>
-                    ))}
+                    {validEnds.map((end) => <button key={end} onClick={() => handlePlayTile(end)} className="bg-yellow-500 text-black text-xs px-2 py-1 rounded-full font-bold">{end === 'left' ? '←' : '→'}</button>)}
                   </div>
                 )}
               </div>
@@ -475,22 +375,9 @@ export default function GameScreen() {
         </div>
       </div>
 
-      {/* Action Buttons */}
       <div className="flex gap-2 px-4 pb-4">
-        <button
-          onClick={handleDraw}
-          disabled={!isPlayerTurn || roundEnded || gameState.stock.length === 0}
-          className="game-btn game-btn-secondary flex-1 text-sm"
-        >
-          سحب ({gameState.stock.length})
-        </button>
-        <button
-          onClick={handleSkip}
-          disabled={!isPlayerTurn || roundEnded}
-          className="game-btn game-btn-secondary flex-1 text-sm"
-        >
-          تخطي
-        </button>
+        <button onClick={handleDraw} disabled={!isPlayerTurn || roundEnded || gameState.stock.length === 0} className="game-btn game-btn-secondary flex-1 text-sm">سحب ({gameState.stock.length})</button>
+        <button onClick={handleSkip} disabled={!isPlayerTurn || roundEnded} className="game-btn game-btn-secondary flex-1 text-sm">تخطي</button>
       </div>
     </div>
   )
