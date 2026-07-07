@@ -275,13 +275,12 @@ export default function GameScreen() {
       setMessage('انتهى الوقت! سحب تلقائي')
       playerDrawCountRef.current += 1
       playerHasDrawnRef.current = true
-      soundEngine.playDraw()
     } else {
       const newState = skipTurn(gameState)
       setGameState(newState)
-      setMessage('انتهى الوقت! تخطي تلقائي')
-      soundEngine.playClick()
+      setMessage('انتهى الوقت! تخطي الدور')
     }
+    setSelectedTile(null)
     setTimerKey(prev => prev + 1)
   }, [gameState, settings.gameMode])
 
