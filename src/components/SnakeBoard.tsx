@@ -5,8 +5,8 @@ interface Props {
   board: BoardTile[]
 }
 
-const TILE_W = 40
-const TILE_H = 80
+const TILE_W = 36   // Narrow width (for doubles)
+const TILE_H = 72   // Long length (for normal tiles)
 
 export default function SnakeBoard({ board }: Props) {
   if (board.length === 0) {
@@ -17,8 +17,7 @@ export default function SnakeBoard({ board }: Props) {
     )
   }
 
-  // Calculate centering offset dynamically
-  // This ensures the board is always centered regardless of how many tiles are added
+  // Calculate centering offset to keep the chain centered
   const offset = useMemo(() => {
     const xs = board.map(t => t.x)
     const ys = board.map(t => t.y)
@@ -41,8 +40,11 @@ export default function SnakeBoard({ board }: Props) {
           transition: 'transform 0.3s ease-out',
         }}
       >
-        {board.map((tile) => {
+        {board.map((tile, index) => {
+          const isDouble = tile.top === tile.bottom
           const isVertical = tile.rotation === 0 || tile.rotation === 180
+
+          // Calculate dimensions based on rotation
           const width = isVertical ? TILE_W : TILE_H
           const height = isVertical ? TILE_H : TILE_W
 
@@ -60,12 +62,24 @@ export default function SnakeBoard({ board }: Props) {
                 transition: 'all 0.2s ease-out',
               }}
             >
-              <div className="w-full h-full bg-[#f5f0e6] border border-[#8b7355] rounded-md flex flex-col overflow-hidden shadow-md">
-                {/* Top half */}
-                <div className="flex-1 flex items-center justify-center border-b border-[#8b7355]/40 relative">
+              <div 
+                className="w-full h-full bg-[#f5f0e6] border-2 border-[#8b7355] rounded-md flex flex-col overflow-hidden shadow-md"
+                style={{
+                  // For horizontal tiles (rotation 90 or 270), swap flex direction
+                  flexDirection: isVertical ? 'column' : 'row',
+                }}
+              >
+                {/* First half - always shows tile.top */}
+                <div 
+                  className="flex-1 flex items-center justify-center border-b border-[#8b7355]/40 relative"
+                  style={{
+                    borderBottomWidth: isVertical ? '1px' : '0',
+                    borderRightWidth: isVertical ? '0' : '1px',
+                  }}
+                >
                   <Dots count={tile.top} />
                 </div>
-                {/* Bottom half */}
+                {/* Second half - always shows tile.bottom */}
                 <div className="flex-1 flex items-center justify-center relative">
                   <Dots count={tile.bottom} />
                 </div>
