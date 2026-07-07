@@ -13,7 +13,6 @@ export default function SnakeBoard({ board }: Props) {
   const { offsetX, offsetY, boardWidth, boardHeight } = useMemo(() => {
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
     for (const tile of board) {
-      // منطق الأبعاد الصحيح بناءً على الدوران الهندسي
       const isHorizontal = tile.rotation === 90 || tile.rotation === 270
       const tileW = isHorizontal ? 72 : 36
       const tileH = isHorizontal ? 36 : 72
