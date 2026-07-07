@@ -26,10 +26,16 @@ export default function SnakeBoard({ board }: Props) {
     let maxY = -Infinity
 
     for (const tile of board) {
+      // تحديد الاتجاه بشكل صحيح بناءً على زاوية المحرك
+      const isHorizontal = tile.rotation === 90 || tile.rotation === 270
       const isDouble = tile.top === tile.bottom
-      const isVertical = tile.rotation === 0 || tile.rotation === 180
-      const tileW = isVertical ? 36 : 72
-      const tileH = isVertical ? 72 : 36
+
+      // الأبعاد: إذا كان أفقيًا، عرضه 72 وارتفاعه 36. إذا عموديًا، العكس.
+      const tileW = isHorizontal ? 72 : 36
+      const tileH = isHorizontal ? 36 : 72
+
+      // لاحظ أن الدبل في المحرك يتم تحديد زاويته بناءً على انعطاف المسار، 
+      // لذا لا داعي لمعالجته هنا بشكل منفصل، بل نثق بـ tile.rotation
 
       const left = tile.x - tileW / 2
       const right = tile.x + tileW / 2
@@ -54,18 +60,16 @@ export default function SnakeBoard({ board }: Props) {
     position: 'relative',
     width: `${Math.max(boardWidth, 300)}px`,
     height: `${Math.max(boardHeight, 300)}px`,
-    minWidth: '100%',
-    minHeight: '100%',
+    // تم إزالة minWidth و minHeight لتجنب مشاكل التمرير غير المرغوب فيها
   }
 
   return (
     <div className="w-full h-full flex items-center justify-center overflow-auto">
       <div style={containerStyle}>
         {board.map((tile) => {
-          const isDouble = tile.top === tile.bottom
-          const isVertical = tile.rotation === 0 || tile.rotation === 180
-          const tileW = isVertical ? 36 : 72
-          const tileH = isVertical ? 72 : 36
+          const isHorizontal = tile.rotation === 90 || tile.rotation === 270
+          const tileW = isHorizontal ? 72 : 36
+          const tileH = isHorizontal ? 36 : 72
 
           // Convert center coordinates to top-left positioning with offset
           const left = tile.x + offsetX - tileW / 2
@@ -93,7 +97,7 @@ export default function SnakeBoard({ board }: Props) {
                   border: '2px solid #8b7355',
                   borderRadius: '6px',
                   display: 'flex',
-                  flexDirection: isVertical ? 'column' : 'row',
+                  flexDirection: isHorizontal ? 'row' : 'column', // تم عكس الاتجاه هنا ليتناسب مع الأبعاد
                   overflow: 'hidden',
                   boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
                 }}
@@ -106,13 +110,13 @@ export default function SnakeBoard({ board }: Props) {
                     alignItems: 'center',
                     justifyContent: 'center',
                     position: 'relative',
-                    borderBottom: isVertical ? '1px solid rgba(139,115,85,0.4)' : 'none',
-                    borderRight: !isVertical ? '1px solid rgba(139,115,85,0.4)' : 'none',
+                    borderBottom: !isHorizontal ? '1px solid rgba(139,115,85,0.4)' : 'none',
+                    borderRight: isHorizontal ? '1px solid rgba(139,115,85,0.4)' : 'none',
                   }}
                 >
                   <Dots count={tile.top} />
                 </div>
-                
+
                 {/* Second value */}
                 <div style={{
                   flex: 1,
@@ -132,8 +136,8 @@ export default function SnakeBoard({ board }: Props) {
   )
 }
 
+// دوال النقاط (Dots component) تبقى كما هي دون تغيير
 function Dots({ count }: { count: number }) {
-  // ترتيب النقاط حسب الرقم
   const positions: Record<number, Array<{ top?: string; left?: string; right?: string; bottom?: string; transform?: string }>> = {
     0: [],
     1: [{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }],
