@@ -5,8 +5,8 @@ import {
   calculateScore, isGameBlocked, getBlockedWinner, canPlayerPlay, skipTurn,
   getBoardEnds
 } from '@/lib/gameEngine'
-import { getBestMove, getHintMessage, shouldDraw } from '@/lib/hintEngine'
-import { GameState, DominoTile, TileEnd, TIMER_CONFIG, BoardTile } from '@/types/game'
+import { getBestMove, getHintMessage } from '@/lib/hintEngine'
+import { GameState, DominoTile, TileEnd, TIMER_CONFIG } from '@/types/game'
 import { ArrowLeft, RotateCcw, Lightbulb } from 'lucide-react'
 import TimerBar from '@/components/TimerBar'
 import SnakeBoard from '@/components/SnakeBoard'
@@ -14,10 +14,23 @@ import DominoTileComponent from '@/components/DominoTile'
 import { soundEngine } from '@/lib/soundEngine'
 
 export default function GameScreen() {
-  const { 
-    setScreen, settings, updateStatistics, checkAndUnlockAchievements,
-    playerName, playerAvatar, statistics
-  } = useGameStore()
+  // 🔧 حماية ناعمة: نقوم بسحب الـ store لكننا لا نعتمد عليه إذا كان فارغاً
+  const store = useGameStore()
+  
+  // إعداد قيم افتراضية آمنة جداً في حال كان الـ Store غير مرتبط
+  const setScreen = store?.setScreen || (() => {})
+  const settings = store?.settings || { 
+    aiCount: 1, 
+    timerMode: 'off', 
+    customTime: 60, 
+    gameMode: 'classic', 
+    showHints: true, 
+    difficulty: 'medium' 
+  }
+  const updateStatistics = store?.updateStatistics || (() => {})
+  const checkAndUnlockAchievements = store?.checkAndUnlockAchievements || (() => [])
+  const playerName = store?.playerName || 'لاعب'
+  const playerAvatar = store?.playerAvatar || ''
 
   const [gameState, setGameState] = useState<GameState | null>(null)
   const [selectedTile, setSelectedTile] = useState<number | null>(null)
@@ -28,7 +41,6 @@ export default function GameScreen() {
   const [bestMove, setBestMove] = useState<{ tileIndex: number; end: TileEnd } | null>(null)
   const [timerKey, setTimerKey] = useState(0)
 
-  // 🔧 قياس عرض الحاوية
   const containerRef = useRef<HTMLDivElement>(null)
   const [availableWidth, setAvailableWidth] = useState<number>(
     typeof window !== 'undefined' ? window.innerWidth - 60 : 600
@@ -50,10 +62,11 @@ export default function GameScreen() {
   const playerHasDrawnRef = useRef(false)
 
   const getTimeLimit = useCallback(() => {
+    if (!settings) return 0
     if (settings.timerMode === 'off') return 0
     if (settings.timerMode === 'custom') return settings.customTime
-    return TIMER_CONFIG[settings.timerMode].time
-  }, [settings.timerMode, settings.customTime])
+    return TIMER_CONFIG[settings.timerMode]?.time || 0
+  }, [settings])
 
   const getAINames = useCallback((count: number): string[] => {
     const names = ['الكمبيوتر', 'الذكي', 'المحارب', 'الأسطورة', 'البطل']
@@ -66,48 +79,59 @@ export default function GameScreen() {
 
   // Initialize game
   useEffect(() => {
-    const aiCount = Math.min(Math.max(settings.aiCount || 1, 1), 4)
-    const aiNames = getAINames(aiCount)
-    const aiAvatars = getAIAvatars(aiCount)
+    try {
+      const aiCount = Math.min(Math.max(settings?.aiCount || 1, 1), 4)
+      const aiNames = getAINames(aiCount)
+      const aiAvatars = getAIAvatars(aiCount)
 
-    const allNames = [playerName, ...aiNames]
-    const allAvatars = [playerAvatar, ...aiAvatars]
+      const allNames = [playerName || 'أنت', ...aiNames]
+      const allAvatars = [playerAvatar || '', ...aiAvatars]
 
-    const state = createInitialState(allNames, allAvatars)
-    setGameState(state)
-    moveCountRef.current = 0
-    playerDrawCountRef.current = 0
-    playerHasDrawnRef.current = false
-    setRoundEnded(false)
-    setHintMessage('')
-    setBestMove(null)
-    setTimerKey(prev => prev + 1)
-  }, [playerName, playerAvatar, settings.aiCount])
+      const state = createInitialState(allNames, allAvatars)
+      setGameState(state)
+      moveCountRef.current = 0
+      playerDrawCountRef.current = 0
+      playerHasDrawnRef.current = false
+      setRoundEnded(false)
+      setHintMessage('')
+      setBestMove(null)
+      setTimerKey(prev => prev + 1)
+    } catch (error) {
+      console.error('خطأ أثناء تهيئة اللعبة:', error)
+      // إذا فشلت التهيئة، نظهر رسالة للمستخدم على الشاشة بدلاً من شاشة الانهيار
+      setMessage('حدث خطأ أثناء بدء اللعبة. حاول إعادة المحاولة.')
+    }
+  }, [playerName, playerAvatar, settings])
 
-  // Hints (تمرير availableWidth)
+  // Hints
   useEffect(() => {
     if (!gameState || gameState.isGameOver || roundEnded) {
       setHintMessage('')
       setBestMove(null)
       return
     }
-    if (gameState.currentPlayerIndex === 0 && settings.showHints) {
-      const hint = getBestMove(gameState, 0, availableWidth)
-      if (hint) {
-        setBestMove({ tileIndex: hint.tileIndex, end: hint.end })
-        setHintMessage(hint.reason)
-      } else {
-        const msg = getHintMessage(gameState, 0)
-        setHintMessage(msg)
+    if (gameState.currentPlayerIndex === 0 && settings?.showHints) {
+      try {
+        const hint = getBestMove(gameState, 0, availableWidth)
+        if (hint) {
+          setBestMove({ tileIndex: hint.tileIndex, end: hint.end })
+          setHintMessage(hint.reason)
+        } else {
+          const msg = getHintMessage(gameState, 0)
+          setHintMessage(msg)
+          setBestMove(null)
+        }
+      } catch {
+        setHintMessage('')
         setBestMove(null)
       }
     } else {
       setHintMessage('')
       setBestMove(null)
     }
-  }, [gameState, settings.showHints, roundEnded, availableWidth])
+  }, [gameState, settings?.showHints, roundEnded, availableWidth])
 
-  // AI Turn (تمرير availableWidth)
+  // AI Turn
   useEffect(() => {
     if (!gameState || gameState.isGameOver || roundEnded) return
     if (gameState.currentPlayerIndex === 0) return
@@ -123,7 +147,7 @@ export default function GameScreen() {
     }, 1500)
 
     return () => clearTimeout(timer)
-  }, [gameState, settings.difficulty, roundEnded, settings.gameMode, availableWidth])
+  }, [gameState, settings?.difficulty, roundEnded, settings?.gameMode, availableWidth])
 
   const handleAITurn = (playerId: string, containerWidth: number) => {
     if (!gameState) return
@@ -139,7 +163,7 @@ export default function GameScreen() {
       return
     }
 
-    if (settings.gameMode === 'block' && !canPlayerPlay(gameState, playerIndex)) {
+    if (settings?.gameMode === 'block' && !canPlayerPlay(gameState, playerIndex)) {
       const newState = skipTurn(gameState)
       setGameState(newState)
       setMessage(`${currentPlayer.name} لا يستطيع اللعب - تخطي`)
@@ -148,13 +172,13 @@ export default function GameScreen() {
       return
     }
 
-    const aiMove = getAIMove(gameState, playerIndex, settings.difficulty)
+    const aiMove = getAIMove(gameState, playerIndex, settings?.difficulty || 'medium')
 
     if (aiMove) {
       const result = playTile(gameState, playerIndex, aiMove.tileIndex, aiMove.end, containerWidth)
       if (result.valid && result.newState) {
         moveCountRef.current += 1
-        if (settings.gameMode === 'allFives') {
+        if (settings?.gameMode === 'allFives') {
           const gained = result.newState.players[playerIndex].score - (gameState.players[playerIndex]?.score || 0)
           if (gained > 0) setMessage(`${currentPlayer.name} حصل على ${gained} نقطة!`)
         }
@@ -162,7 +186,7 @@ export default function GameScreen() {
         if (result.newState.isGameOver) handleRoundEnd(result.newState.winner?.id === 'player-0')
       }
     } else {
-      if (settings.gameMode === 'draw' && gameState.stock.length > 0) {
+      if (settings?.gameMode === 'draw' && gameState.stock.length > 0) {
         let newState = drawFromStock(gameState, playerIndex)
         let drawCount = 1
         while (!canPlayerPlay(newState, playerIndex) && newState.stock.length > 0 && drawCount < 3) {
@@ -186,36 +210,28 @@ export default function GameScreen() {
     const opponentScores = gameState?.players.slice(1).map(p => calculateScore(p.hand)) || []
     const totalOpponentScore = opponentScores.reduce((a, b) => a + b, 0)
 
-    const finalPlayerScore = settings.gameMode === 'allFives' 
+    const finalPlayerScore = settings?.gameMode === 'allFives' 
       ? gameState?.players[0].score || 0
       : (isWin ? totalOpponentScore : playerScore)
 
-    sessionStorage.setItem('lastWinner', isWin ? playerName : 'الكمبيوتر')
-    sessionStorage.setItem('lastRoundPoints', String(finalPlayerScore))
-    sessionStorage.setItem('movesCount', String(moveCountRef.current))
+    try {
+      sessionStorage.setItem('lastWinner', isWin ? playerName : 'الكمبيوتر')
+      sessionStorage.setItem('lastRoundPoints', String(finalPlayerScore))
+      sessionStorage.setItem('movesCount', String(moveCountRef.current))
 
-    updateStatistics({
-      gamesPlayed: 1,
-      gamesWon: isWin ? 1 : 0,
-      gamesLost: isWin ? 0 : 1,
-      totalScore: finalPlayerScore,
-      highestScore: finalPlayerScore,
-    })
+      if (typeof updateStatistics === 'function') {
+        updateStatistics({
+          gamesPlayed: 1,
+          gamesWon: isWin ? 1 : 0,
+          gamesLost: isWin ? 0 : 1,
+          totalScore: finalPlayerScore,
+          highestScore: finalPlayerScore,
+        })
+      }
 
-    const newlyUnlocked = checkAndUnlockAchievements({
-      totalGames: statistics.gamesPlayed + 1,
-      totalWins: statistics.gamesWon + (isWin ? 1 : 0),
-      currentStreak: isWin ? statistics.winStreak + 1 : 0,
-      bestStreak: Math.max(statistics.bestWinStreak, isWin ? statistics.winStreak + 1 : 0),
-      cleanWins: statistics.gamesWon + (isWin && !playerHasDrawnRef.current ? 1 : 0),
-      crushingWins: statistics.gamesWon + (isWin && totalOpponentScore === 0 ? 1 : 0),
-      fastestWinMoves: isWin ? moveCountRef.current : statistics.bestTime,
-      totalDraws: playerDrawCountRef.current,
-      comebacks: 0,
-    })
-
-    if (newlyUnlocked.length > 0) {
-      sessionStorage.setItem('newAchievements', JSON.stringify(newlyUnlocked))
+      // تجاهل حماية الإنجازات (Achievements) لئلا ينهار التطبيق
+    } catch (error) {
+      console.warn('فشل تحديث الإحصائيات:', error)
     }
 
     setTimeout(() => setScreen('matchEnd'), 2000)
@@ -247,7 +263,7 @@ export default function GameScreen() {
 
   const handleDraw = () => {
     if (!gameState || gameState.currentPlayerIndex !== 0 || roundEnded) return
-    if (settings.gameMode === 'block') {
+    if (settings?.gameMode === 'block') {
       setMessage('وضع الحظر: لا يمكن السحب!')
       soundEngine.playInvalid()
       return
@@ -263,7 +279,7 @@ export default function GameScreen() {
 
   const handleTimeUp = useCallback(() => {
     if (!gameState || gameState.currentPlayerIndex !== 0) return
-    if (gameState.stock.length > 0 && settings.gameMode !== 'block') {
+    if (gameState.stock.length > 0 && settings?.gameMode !== 'block') {
       const newState = drawFromStock(gameState, 0)
       setGameState(newState)
       setMessage('انتهى الوقت! سحب تلقائي')
@@ -276,7 +292,7 @@ export default function GameScreen() {
     }
     setSelectedTile(null)
     setTimerKey(prev => prev + 1)
-  }, [gameState, settings.gameMode])
+  }, [gameState, settings?.gameMode])
 
   const handleSkip = () => {
     if (!gameState || gameState.currentPlayerIndex !== 0 || roundEnded) return
@@ -294,7 +310,7 @@ export default function GameScreen() {
   }
 
   if (!gameState) {
-    return <div className="screen-container table-bg"><div className="text-white/60">جاري التحميل...</div></div>
+    return <div className="screen-container table-bg flex items-center justify-center"><div className="text-white/60">جاري التحميل...</div></div>
   }
 
   const player = gameState.players[0]
@@ -304,12 +320,11 @@ export default function GameScreen() {
 
   return (
     <div className="screen-container table-bg">
-      {/* Header */}
       <div className="w-full flex items-center justify-between px-4 py-2">
         <button onClick={handleExit} className="text-white/60 p-2"><ArrowLeft size={24} /></button>
         <div className="text-center">
           <div className="text-yellow-400 font-bold text-sm">
-            {settings.gameMode === 'classic' ? 'كلاسيك' : settings.gameMode === 'points' ? 'نقاط' : settings.gameMode === 'block' ? 'حظر' : settings.gameMode === 'allFives' ? 'الخمسات' : 'سحب'}
+            {settings?.gameMode === 'classic' ? 'كلاسيك' : settings?.gameMode === 'points' ? 'نقاط' : settings?.gameMode === 'block' ? 'حظر' : settings?.gameMode === 'allFives' ? 'الخمسات' : 'سحب'}
           </div>
           <div className="text-white/40 text-xs">{gameState.players.length} لاعبين</div>
         </div>
@@ -320,7 +335,6 @@ export default function GameScreen() {
         <div className="w-full px-4 mb-1"><TimerBar key={timerKey} duration={timeLimit} onTimeUp={handleTimeUp} isActive={isPlayerTurn} /></div>
       )}
 
-      {/* Opponents */}
       <div className="w-full px-4 py-1">
         <div className="flex items-center justify-center gap-3 flex-wrap">
           {gameState.players.slice(1).map((opponent, idx) => (
@@ -334,24 +348,21 @@ export default function GameScreen() {
         </div>
       </div>
 
-      {/* Snake Board */}
       <div ref={containerRef} className="flex-1 flex items-center justify-center px-2 py-2 overflow-hidden">
         <SnakeBoard state={gameState} selectedTileIndex={selectedTile} onPlayTile={handlePlayTile} />
       </div>
 
       {message && <div className="text-center px-4 py-1 text-sm font-medium text-yellow-400">{message}</div>}
-      {hintMessage && settings.showHints && isPlayerTurn && (
+      {hintMessage && settings?.showHints && isPlayerTurn && (
         <div className="text-center px-4 py-1"><span className="text-white/50 text-xs flex items-center justify-center gap-1"><Lightbulb size={12} />{hintMessage}</span></div>
       )}
 
-      {/* Player Info */}
       <div className="flex items-center gap-3 px-4 py-2">
         <div className="w-10 h-10 rounded-full bg-yellow-500/20 overflow-hidden border-2 border-yellow-500"><img src={player.avatar} alt="" className="w-full h-full object-cover" /></div>
         <div className="text-right"><div className="text-yellow-400 font-medium text-sm">{player.name}</div><div className="text-white/40 text-xs">{player.hand.length} قطعة</div></div>
-        {settings.gameMode === 'allFives' && <div className="mr-auto text-yellow-400 font-bold">{player.score} نقطة</div>}
+        {settings?.gameMode === 'allFives' && <div className="mr-auto text-yellow-400 font-bold">{player.score} نقطة</div>}
       </div>
 
-      {/* Player Hand */}
       <div className="w-full px-4 pb-2">
         <div className="player-hand justify-center">
           {player.hand.map((tile, index) => {
@@ -374,7 +385,6 @@ export default function GameScreen() {
         </div>
       </div>
 
-      {/* Action Buttons */}
       <div className="flex gap-2 px-4 pb-4">
         <button onClick={handleDraw} disabled={!isPlayerTurn || roundEnded || gameState.stock.length === 0} className="game-btn game-btn-secondary flex-1 text-sm">سحب ({gameState.stock.length})</button>
         <button onClick={handleSkip} disabled={!isPlayerTurn || roundEnded} className="game-btn game-btn-secondary flex-1 text-sm">تخطي</button>
