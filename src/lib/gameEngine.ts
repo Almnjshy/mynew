@@ -1,16 +1,10 @@
 import { DominoTile, Player, GameState, TileEnd, MoveResult, BoardTile, PathHead, BoardBounds } from '@/types/game'
 
-// ============================================================
-// CONSTANTS
-// ============================================================
 const TILE_W = 36
 const TILE_H = 72
 const GAP = 6
 const BOARD_MARGIN = 40
 
-// ============================================================
-// DECK & UTILITIES
-// ============================================================
 export const shuffle = <T>(array: T[]): T[] => {
   const arr = [...array]
   for (let i = arr.length - 1; i > 0; i--) {
@@ -67,9 +61,6 @@ export const dealTiles = (players: Player[], stock: DominoTile[]): { players: Pl
   return { players: newPlayers, stock: newStock }
 }
 
-// ============================================================
-// BOARD VALIDATION
-// ============================================================
 export const getBoardEnds = (board: BoardTile[]): { leftValue: number; rightValue: number } => {
   if (board.length === 0) return { leftValue: -1, rightValue: -1 }
   return { leftValue: board[0].startValue, rightValue: board[board.length - 1].endValue }
@@ -102,9 +93,6 @@ function updateBounds(currentBounds: BoardBounds, x: number, y: number, isHorizo
   }
 }
 
-// ============================================================
-// SNAKE LAYOUT ENGINE (The Core)
-// ============================================================
 function calculateNextPosition(
   state: GameState,
   tile: DominoTile,
@@ -137,8 +125,8 @@ function calculateNextPosition(
   const targetCurrentWidth = targetIsHorizontal ? TILE_H : TILE_W
   const targetCurrentHeight = targetIsHorizontal ? TILE_W : TILE_H
 
-  const expectedRotation = isDouble 
-    ? (currentDir === 'up' || currentDir === 'down' ? 90 : 0) 
+  const expectedRotation = isDouble
+    ? (currentDir === 'up' || currentDir === 'down' ? 90 : 0)
     : (currentDir === 'up' || currentDir === 'down' ? 0 : 90)
   const isHorizontal = expectedRotation === 90 || expectedRotation === 270
   const tileWidth = isHorizontal ? TILE_H : TILE_W
@@ -161,7 +149,7 @@ function calculateNextPosition(
   if (outOfRightBound || outOfLeftBound) {
     currentRow += 1
     newDir = 'down'
-    nextX = targetTile.x 
+    nextX = targetTile.x
     nextY = targetTile.y + GAP + (targetCurrentHeight / 2) + (tileHeight / 2)
   } else if (currentDir === 'down') {
     newDir = currentRow % 2 === 0 ? 'right' : 'left'
@@ -180,9 +168,6 @@ function calculateNextPosition(
   }
 }
 
-// ============================================================
-// PLAY & SCORING
-// ============================================================
 export const playTile = (state: GameState, playerIndex: number, tileIndex: number, end: TileEnd, containerWidth: number): MoveResult => {
   const player = state.players[playerIndex]
   const tile = player.hand[tileIndex]
@@ -280,17 +265,52 @@ export const calculateAllFivesScore = (board: BoardTile[]): number => {
   return total % 5 === 0 ? total : 0
 }
 
-// ============================================================
-// DRAW, TURN & AI
-// ============================================================
 export const drawFromStock = (state: GameState, playerIndex: number): GameState => {
   if (state.stock.length === 0) return state
   const newStock = [...state.stock]
   const tile = newStock.pop()!
   const newPlayers = [...state.players]
-  const newHand = [...newPlayers[playerIndex].hand, tile]
-  newPlayers[playerIndex] = { ...newPlayers[playerIndex], hand: sortPlayerHand(newHand) }
+  const player = { ...newPlayers[playerIndex], hand: sortPlayerHand([...newPlayers[playerIndex].hand, tile]) }
+  newPlayers[playerIndex] = player
   return { ...state, stock: newStock, players: newPlayers }
+}
+
+export const skipTurn = (state: GameState): GameState => {
+  return {
+    ...state,
+    currentPlayerIndex: (state.currentPlayerIndex + 1) % state.players.length,
+  }
+}
+
+export const canPlayerPlay = (state: GameState, playerIndex: number): boolean => {
+  const player = state.players[playerIndex]
+  if (!player) return false
+  for (const tile of player.hand) {
+    if (getValidEnds(tile, state.board).length > 0) return true
+  }
+  return false
+}
+
+export const isGameBlocked = (state: GameState): boolean => {
+  if (state.stock.length > 0) return false
+  for (let i = 0; i < state.players.length; i++) {
+    if (canPlayerPlay(state, i)) return false
+  }
+  return true
+}
+
+export const getBlockedWinner = (state: GameState): Player | null => {
+  if (!isGameBlocked(state)) return null
+  let minScore = Infinity
+  let winner: Player | null = null
+  for (const player of state.players) {
+    const score = calculateScore(player.hand)
+    if (score < minScore) {
+      minScore = score
+      winner = player
+    }
+  }
+  return winner
 }
 
 export const createInitialState = (playerNames: string[], playerAvatars: string[]): GameState => {
@@ -351,38 +371,4 @@ export const getAIMove = (state: GameState, playerIndex: number, difficulty: str
   if (difficulty === 'hard') return { tileIndex: validMoves[0].tileIndex, end: validMoves[0].end }
   const topMoves = validMoves.slice(0, Math.min(3, validMoves.length))
   return topMoves[Math.floor(Math.random() * topMoves.length)]
-}
-
-// ============================================================
-// BLOCKED STATE
-// ============================================================
-export const isGameBlocked = (state: GameState): boolean => {
-  if (state.stock.length > 0) return false
-  for (let i = 0; i < state.players.length; i++) {
-    for (const tile of state.players[i].hand) {
-      if (getValidEnds(tile, state.board).length > 0) return false
-    }
-  }
-  return true
-}
-
-export const getBlockedWinner = (state: GameState): Player | null => {
-  let winner = state.players[0]; let minScore = calculateScore(winner.hand); let tie = false
-  for (let i = 1; i < state.players.length; i++) {
-    const score = calculateScore(state.players[i].hand)
-    if (score < minScore) { minScore = score; winner = state.players[i]; tie = false } 
-    else if (score === minScore) tie = true
-  }
-  return tie ? null : winner
-}
-
-export const canPlayerPlay = (state: GameState, playerIndex: number): boolean => {
-  for (const tile of state.players[playerIndex].hand) {
-    if (getValidEnds(tile, state.board).length > 0) return true
-  }
-  return false
-}
-
-export const skipTurn = (state: GameState): GameState => {
-  return { ...state, currentPlayerIndex: (state.currentPlayerIndex + 1) % state.players.length }
 }
