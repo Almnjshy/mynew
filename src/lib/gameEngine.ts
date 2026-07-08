@@ -1,4 +1,4 @@
-import { DominoTile, Player, GameState, TileEnd, MoveResult, BoardTile, PathHead, BoardBounds } from '@/types/game'
+import { DominoTile, Player, GameState, TileEnd, MoveResult, BoardTile, PathHead, BoardBounds, Difficulty } from '@/types/game'
 
 const TILE_W = 36
 const TILE_H = 72
@@ -368,6 +368,60 @@ export const getBlockedWinner = (state: GameState): Player | null => {
     }
   }
   return winner
+}
+
+
+/**
+ * Get the best AI move based on difficulty
+ */
+export const getAIMove = (state: GameState, playerIndex: number, difficulty: Difficulty = 'medium'): { tileIndex: number; end: TileEnd } | null => {
+  const player = state.players[playerIndex]
+  if (!player || !player.isAI) return null
+
+  const validMoves: { tileIndex: number; end: TileEnd; score: number }[] = []
+
+  for (let i = 0; i < player.hand.length; i++) {
+    const tile = player.hand[i]
+    const ends = getValidEnds(tile, state.board)
+    for (const end of ends) {
+      let score = 0
+
+      // Prefer doubles (harder to play later)
+      if (tile.top === tile.bottom) score += 10
+
+      // Prefer high numbers in hard mode
+      if (difficulty === 'hard') {
+        score += tile.top + tile.bottom
+      }
+
+      // Prefer moves that leave options open
+      if (difficulty === 'medium' || difficulty === 'hard') {
+        const remainingHand = player.hand.filter((_, idx) => idx !== i)
+        const remainingEnds = getBoardEnds(state.board)
+        const openEnds = end === 'left' ? remainingEnds.rightValue : remainingEnds.leftValue
+        const canPlayAfter = remainingHand.some(t => 
+          t.top === openEnds || t.bottom === openEnds
+        )
+        if (canPlayAfter) score += 5
+      }
+
+      validMoves.push({ tileIndex: i, end, score })
+    }
+  }
+
+  if (validMoves.length === 0) return null
+
+  // Sort by score (descending)
+  validMoves.sort((a, b) => b.score - a.score)
+
+  // Easy: random move
+  if (difficulty === 'easy') {
+    const randomIndex = Math.floor(Math.random() * validMoves.length)
+    return { tileIndex: validMoves[randomIndex].tileIndex, end: validMoves[randomIndex].end }
+  }
+
+  // Medium/Hard: best move
+  return { tileIndex: validMoves[0].tileIndex, end: validMoves[0].end }
 }
 
 export const createInitialState = (playerNames: string[], playerAvatars: string[]): GameState => {
