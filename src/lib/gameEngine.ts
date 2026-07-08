@@ -2,8 +2,33 @@ import { DominoTile, Player, GameState, TileEnd, MoveResult, BoardTile, PathHead
 
 const TILE_W = 36
 const TILE_H = 72
-const GAP = 6
+const GAP = 4
 const BOARD_MARGIN = 40
+
+// Unicode domino characters base (U+1F030 to U+1F093)
+const UNICODE_DOMINO_BASE = 0x1F030
+
+/**
+ * Get Unicode character for a domino tile
+ * This is more visually appealing than drawing dots manually
+ */
+export function getUnicodeTile(top: number, bottom: number, isHorizontal: boolean = false): string {
+  // Calculate Unicode offset: horizontal tiles start at 0x1F030, vertical at 0x1F062
+  const base = isHorizontal ? 0x1F030 : 0x1F062
+  // The offset is calculated as: top * 7 + bottom (for top <= bottom)
+  // For rotated tiles (top > bottom), we use the reverse
+  const normalizedTop = Math.min(top, bottom)
+  const normalizedBottom = Math.max(top, bottom)
+  const offset = normalizedTop * 7 + normalizedBottom
+  return String.fromCodePoint(base + offset)
+}
+
+/**
+ * Get Unicode for a face-down tile
+ */
+export function getUnicodeBack(isHorizontal: boolean = false): string {
+  return isHorizontal ? String.fromCodePoint(0x1F030) : String.fromCodePoint(0x1F062)
+}
 
 export const shuffle = <T>(array: T[]): T[] => {
   const arr = [...array]
@@ -93,6 +118,11 @@ function updateBounds(currentBounds: BoardBounds, x: number, y: number, isHorizo
   }
 }
 
+/**
+ * Calculate the position for a new tile to be placed on the board.
+ * The tile is positioned so it CONNECTS to the existing chain.
+ * Uses snake layout to prevent board overflow.
+ */
 function calculateNextPosition(
   state: GameState,
   tile: DominoTile,
@@ -103,6 +133,7 @@ function calculateNextPosition(
 
   const AVAILABLE_W = Math.max(containerWidth, 300) / 2 - BOARD_MARGIN
 
+  // First tile - center of board
   if (state.board.length === 0) {
     return {
       x: 0,
@@ -113,7 +144,9 @@ function calculateNextPosition(
   }
 
   const currentHead = end === 'right' ? state.rightHead : state.leftHead
-  const targetTile = end === 'right' ? state.board[state.board.length - 1] : state.board[0]
+  const targetTile = end === 'right' 
+    ? state.board[state.board.length - 1] 
+    : state.board[0]
 
   let currentDir = currentHead.direction
   let currentRow = currentHead.row
@@ -121,10 +154,12 @@ function calculateNextPosition(
   let nextY = currentHead.y
   let newDir = currentDir
 
+  // Calculate dimensions of the target tile (the one we're connecting to)
   const targetIsHorizontal = targetTile.rotation === 90 || targetTile.rotation === 270
   const targetCurrentWidth = targetIsHorizontal ? TILE_H : TILE_W
   const targetCurrentHeight = targetIsHorizontal ? TILE_W : TILE_H
 
+  // Determine rotation for the new tile
   const expectedRotation = isDouble
     ? (currentDir === 'up' || currentDir === 'down' ? 90 : 0)
     : (currentDir === 'up' || currentDir === 'down' ? 0 : 90)
@@ -132,6 +167,7 @@ function calculateNextPosition(
   const tileWidth = isHorizontal ? TILE_H : TILE_W
   const tileHeight = isHorizontal ? TILE_W : TILE_H
 
+  // Calculate spacing - tile edges should TOUCH (GAP is minimal visual gap)
   let spacing = GAP
   if (currentDir === 'right' || currentDir === 'left') {
     spacing += (targetCurrentWidth / 2) + (tileWidth / 2)
@@ -143,6 +179,7 @@ function calculateNextPosition(
     else nextY -= spacing
   }
 
+  // Check bounds and snake if needed
   const outOfRightBound = currentDir === 'right' && nextX + (tileWidth / 2) > AVAILABLE_W
   const outOfLeftBound = currentDir === 'left' && nextX - (tileWidth / 2) < -AVAILABLE_W
 
@@ -168,6 +205,13 @@ function calculateNextPosition(
   }
 }
 
+/**
+ * Play a tile on the board. The tile is placed at the specified end (left or right)
+ * and must match the value at that end.
+ * 
+ * The tile is oriented so that the matching number faces the board (connected side)
+ * and the other number faces outward (open end).
+ */
 export const playTile = (state: GameState, playerIndex: number, tileIndex: number, end: TileEnd, containerWidth: number): MoveResult => {
   const player = state.players[playerIndex]
   const tile = player.hand[tileIndex]
@@ -178,23 +222,37 @@ export const playTile = (state: GameState, playerIndex: number, tileIndex: numbe
   const isDouble = tile.top === tile.bottom
   const position = calculateNextPosition(state, tile, end, isDouble, containerWidth)
 
+  // Determine how to orient the tile so matching numbers connect
+  // startValue = the number facing the board (connected side)
+  // endValue = the number facing outward (open end)
   let startVal: number, endVal: number
   if (state.board.length === 0) {
+    // First tile - no need to match anything
     startVal = tile.top
     endVal = tile.bottom
   } else if (end === 'left') {
+    // Placing on the left end
     const { leftValue } = getBoardEnds(state.board)
     if (tile.top === leftValue) {
-      startVal = tile.bottom; endVal = tile.top;
+      // tile.top matches leftValue, so tile.bottom becomes the new left end
+      startVal = tile.bottom
+      endVal = tile.top
     } else {
-      startVal = tile.top; endVal = tile.bottom;
+      // tile.bottom matches leftValue, so tile.top becomes the new left end
+      startVal = tile.top
+      endVal = tile.bottom
     }
   } else {
+    // Placing on the right end
     const { rightValue } = getBoardEnds(state.board)
     if (tile.top === rightValue) {
-      startVal = tile.top; endVal = tile.bottom;
+      // tile.top matches rightValue, so tile.bottom becomes the new right end
+      startVal = tile.top
+      endVal = tile.bottom
     } else {
-      startVal = tile.bottom; endVal = tile.top;
+      // tile.bottom matches rightValue, so tile.top becomes the new right end
+      startVal = tile.bottom
+      endVal = tile.top
     }
   }
 
@@ -292,11 +350,10 @@ export const canPlayerPlay = (state: GameState, playerIndex: number): boolean =>
 }
 
 export const isGameBlocked = (state: GameState): boolean => {
-  if (state.stock.length > 0) return false
   for (let i = 0; i < state.players.length; i++) {
     if (canPlayerPlay(state, i)) return false
   }
-  return true
+  return state.stock.length === 0
 }
 
 export const getBlockedWinner = (state: GameState): Player | null => {
@@ -343,32 +400,4 @@ export const createInitialState = (playerNames: string[], playerAvatars: string[
     rightHead: { x: 0, y: 0, direction: 'right', row: 0 },
     bounds: { minX: -400, maxX: 400, minY: -300, maxY: 300 }
   }
-}
-
-export const getAIMove = (state: GameState, playerIndex: number, difficulty: string): { tileIndex: number; end: TileEnd } | null => {
-  const ai = state.players[playerIndex]
-  if (!ai || !ai.isAI) return null
-  const validMoves: { tileIndex: number; end: TileEnd; score: number }[] = []
-  for (let i = 0; i < ai.hand.length; i++) {
-    const ends = getValidEnds(ai.hand[i], state.board)
-    for (const end of ends) {
-      let score = 0; const tile = ai.hand[i]
-      if (tile.top === tile.bottom) score += 5
-      score += tile.top + tile.bottom
-      if (state.board.length > 0) {
-        const { leftValue, rightValue } = getBoardEnds(state.board)
-        const target = end === 'left' ? leftValue : rightValue
-        const otherEnd = end === 'left' ? rightValue : leftValue
-        const newTotal = (tile.top === target ? tile.bottom : tile.top) + otherEnd
-        if (newTotal % 5 === 0) score += 15
-      }
-      validMoves.push({ tileIndex: i, end, score })
-    }
-  }
-  if (validMoves.length === 0) return null
-  if (difficulty === 'easy') return validMoves[Math.floor(Math.random() * validMoves.length)]
-  validMoves.sort((a, b) => b.score - a.score)
-  if (difficulty === 'hard') return { tileIndex: validMoves[0].tileIndex, end: validMoves[0].end }
-  const topMoves = validMoves.slice(0, Math.min(3, validMoves.length))
-  return topMoves[Math.floor(Math.random() * topMoves.length)]
 }
