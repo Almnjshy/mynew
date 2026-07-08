@@ -62,22 +62,3 @@ export interface MoveResult {
   message?: string
   newState?: GameState
 }
-
-// ============================================================
-// الثوابت التي تحتاجها القوائم (وهي التي كانت مفقودة وتسبب الخطأ)
-// ============================================================
-export const TIMER_CONFIG: Record<TimerMode, { label: string; time: number }> = {
-  off: { label: 'بدون مؤقت', time: 0 },
-  standard: { label: 'قياسي (60 ثانية)', time: 60 },
-  fast: { label: 'سريع (30 ثانية)', time: 30 },
-  blitz: { label: 'خاطف (15 ثانية)', time: 15 },
-  custom: { label: 'مخصص', time: 60 },
-}
-
-export const GAME_MODE_CONFIG: Record<GameMode, { label: string; icon: string; description: string }> = {
-  classic: { label: 'كلاسيك', icon: '🎯', description: 'العب حتى نفاذ القطع. الأقل نقاطاً يفوز.' },
-  points: { label: 'نقاط', icon: '📊', description: 'العب لعدد محدد من الجولات.' },
-  block: { label: 'حظر', icon: '🚫', description: 'بدون سحب. إذا توقفت اللعبة، يفوز الأقل نقاطاً.' },
-  allFives: { label: 'الخمسات', icon: '⭐', description: 'احصل على نقاط إضافية عند جعل الأطراف من مضاعفات الرقم 5.' },
-  draw: { label: 'سحب', icon: '🔄', description: 'اسحب القطع من المخزن عند عدم القدرة على اللعب.' },
-}
