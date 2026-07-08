@@ -1,6 +1,5 @@
 import { BoardTile, GameState, TileEnd } from '@/types/game'
 import { useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 
 interface Props {
   state: GameState
@@ -143,76 +142,66 @@ export default function SnakeBoard({ state, onPlayTile, selectedTileIndex }: Pro
           ))}
         </svg>
 
-        {/* Board Tiles with Framer Motion */}
-        <AnimatePresence>
-          {board.map((tile, index) => {
-            const isHorizontal = tile.rotation === 90 || tile.rotation === 270
-            const currentWidth = isHorizontal ? 72 : 36
-            const currentHeight = isHorizontal ? 36 : 72
-            const coords = getCanvasCoords(tile.x, tile.y)
-            const isFirst = index === 0
-            const isLast = index === board.length - 1
+        {/* Board Tiles with CSS Animations */}
+        {board.map((tile, index) => {
+          const isHorizontal = tile.rotation === 90 || tile.rotation === 270
+          const currentWidth = isHorizontal ? 72 : 36
+          const currentHeight = isHorizontal ? 36 : 72
+          const coords = getCanvasCoords(tile.x, tile.y)
+          const isFirst = index === 0
+          const isLast = index === board.length - 1
 
-            return (
-              <motion.div
-                key={tile.id}
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0, opacity: 0 }}
-                transition={{ 
-                  type: "spring",
-                  stiffness: 260,
-                  damping: 20,
-                  delay: index * 0.05
-                }}
-                className="absolute flex items-center justify-center"
-                style={{
-                  left: coords.left,
-                  top: coords.top,
-                  width: `${currentWidth}px`,
-                  height: `${currentHeight}px`,
-                  transform: 'translate(-50%, -50%)',
-                  zIndex: 10,
+          return (
+            <div
+              key={tile.id}
+              className="absolute flex items-center justify-center tile-appear"
+              style={{
+                left: coords.left,
+                top: coords.top,
+                width: `${currentWidth}px`,
+                height: `${currentHeight}px`,
+                transform: 'translate(-50%, -50%)',
+                zIndex: 10,
+                animation: `tileAppear 0.5s ease-out ${index * 0.05}s both`,
+              }}
+            >
+              {/* Unicode Tile */}
+              <div
+                className="flex items-center justify-center select-none tile-hover"
+                style={{ 
+                  width: isHorizontal ? '72px' : '36px',
+                  height: isHorizontal ? '36px' : '72px',
+                  transform: `rotate(${tile.rotation || 0}deg)`,
+                  fontSize: isHorizontal ? '3.5rem' : '2.5rem',
+                  lineHeight: 1,
+                  filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
+                  transition: 'transform 0.3s ease',
                 }}
               >
-                {/* Unicode Tile */}
+                {getUnicodeChar(tile.top, tile.bottom, isHorizontal)}
+              </div>
+
+              {/* Matching number indicator */}
+              {(isFirst || isLast) && (
                 <div
-                  className="flex items-center justify-center select-none"
-                  style={{ 
-                    width: isHorizontal ? '72px' : '36px',
-                    height: isHorizontal ? '36px' : '72px',
-                    transform: `rotate(${tile.rotation || 0}deg)`,
-                    fontSize: isHorizontal ? '3.5rem' : '2.5rem',
-                    lineHeight: 1,
-                    filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
+                  className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-400/90 text-black whitespace-nowrap open-end-badge"
+                  style={{
+                    animation: 'badgeAppear 0.3s ease-out 0.5s both',
                   }}
                 >
-                  {getUnicodeChar(tile.top, tile.bottom, isHorizontal)}
+                  {isFirst ? tile.startValue : tile.endValue}
                 </div>
-
-                {/* Matching number indicator */}
-                {(isFirst || isLast) && (
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-400/90 text-black whitespace-nowrap"
-                  >
-                    {isFirst ? tile.startValue : tile.endValue}
-                  </motion.div>
-                )}
-              </motion.div>
-            )
-          })}
-        </AnimatePresence>
+              )}
+            </div>
+          )
+        })}
 
         {/* Play Hints - Drop zones for selected tile */}
         {selectedTileIndex !== null && onPlayTile && board.length > 0 && (
           <>
             {/* Left Drop Zone */}
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              className="absolute w-14 h-14 bg-yellow-400/20 border-2 border-dashed border-yellow-400 rounded-full cursor-pointer flex items-center justify-center hover:bg-yellow-400/40 transition-colors"
+            <div
+              className="absolute w-14 h-14 bg-yellow-400/20 border-2 border-dashed border-yellow-400 rounded-full cursor-pointer flex items-center justify-center hover:bg-yellow-400/40 transition-all duration-300 drop-zone-pulse"
               style={{
                 ...getCanvasCoords(leftHead?.x ?? 0, leftHead?.y ?? 0),
                 transform: 'translate(-50%, -50%)',
@@ -220,17 +209,13 @@ export default function SnakeBoard({ state, onPlayTile, selectedTileIndex }: Pro
               }}
               onClick={() => onPlayTile(selectedTileIndex, 'left')}
               title="العب في الطرف الأيسر"
-              whileHover={{ scale: 1.2 }}
-              whileTap={{ scale: 0.9 }}
             >
               <span className="text-yellow-300 text-xs font-bold">←</span>
-            </motion.div>
+            </div>
 
             {/* Right Drop Zone */}
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              className="absolute w-14 h-14 bg-cyan-400/20 border-2 border-dashed border-cyan-400 rounded-full cursor-pointer flex items-center justify-center hover:bg-cyan-400/40 transition-colors"
+            <div
+              className="absolute w-14 h-14 bg-cyan-400/20 border-2 border-dashed border-cyan-400 rounded-full cursor-pointer flex items-center justify-center hover:bg-cyan-400/40 transition-all duration-300 drop-zone-pulse"
               style={{
                 ...getCanvasCoords(rightHead?.x ?? 0, rightHead?.y ?? 0),
                 transform: 'translate(-50%, -50%)',
@@ -238,21 +223,16 @@ export default function SnakeBoard({ state, onPlayTile, selectedTileIndex }: Pro
               }}
               onClick={() => onPlayTile(selectedTileIndex, 'right')}
               title="العب في الطرف الأيمن"
-              whileHover={{ scale: 1.2 }}
-              whileTap={{ scale: 0.9 }}
             >
               <span className="text-cyan-300 text-xs font-bold">→</span>
-            </motion.div>
+            </div>
           </>
         )}
 
         {/* First move hint */}
         {selectedTileIndex !== null && onPlayTile && board.length === 0 && (
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: [1, 1.2, 1] }}
-            transition={{ repeat: Infinity, duration: 1.5 }}
-            className="absolute w-16 h-16 bg-green-400/20 border-2 border-dashed border-green-400 rounded-full cursor-pointer flex items-center justify-center hover:bg-green-400/40 transition-colors"
+          <div
+            className="absolute w-16 h-16 bg-green-400/20 border-2 border-dashed border-green-400 rounded-full cursor-pointer flex items-center justify-center hover:bg-green-400/40 transition-all duration-300 start-hint-pulse"
             style={{
               left: '50%',
               top: '50%',
@@ -261,12 +241,71 @@ export default function SnakeBoard({ state, onPlayTile, selectedTileIndex }: Pro
             }}
             onClick={() => onPlayTile(selectedTileIndex, 'left')}
             title="ابدأ اللعب هنا"
-            whileTap={{ scale: 0.9 }}
           >
             <span className="text-green-300 text-xs font-bold">ابدأ</span>
-          </motion.div>
+          </div>
         )}
       </div>
+
+      {/* CSS Animations */}
+      <style>{`
+        @keyframes tileAppear {
+          from {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0);
+          }
+          to {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+          }
+        }
+
+        @keyframes badgeAppear {
+          from {
+            opacity: 0;
+            transform: translateX(-50%) scale(0);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(-50%) scale(1);
+          }
+        }
+
+        @keyframes dropZonePulse {
+          0%, 100% {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 0.7;
+          }
+          50% {
+            transform: translate(-50%, -50%) scale(1.1);
+            opacity: 1;
+          }
+        }
+
+        @keyframes startHintPulse {
+          0%, 100% {
+            transform: translate(-50%, -50%) scale(1);
+            box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.4);
+          }
+          50% {
+            transform: translate(-50%, -50%) scale(1.05);
+            box-shadow: 0 0 0 10px rgba(74, 222, 128, 0);
+          }
+        }
+
+        .tile-hover:hover {
+          transform: translate(-50%, -50%) scale(1.1) !important;
+          filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4)) !important;
+        }
+
+        .drop-zone-pulse {
+          animation: dropZonePulse 1.5s ease-in-out infinite;
+        }
+
+        .start-hint-pulse {
+          animation: startHintPulse 1.5s ease-in-out infinite;
+        }
+      `}</style>
     </div>
   )
 }
