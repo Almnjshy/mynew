@@ -32,27 +32,26 @@ export default function SettingsScreen() {
         <h2 className="text-3xl font-bold gold-accent mb-4">الإعدادات</h2>
 
         <div className="w-full bg-white/10 rounded-xl p-4 flex flex-col gap-4">
-          <SettingRow 
-            icon={<Volume2 size={24} />} 
-            label="الصوت" 
+          <SettingRow
+            icon={<Volume2 size={24} />}
+            label="الصوت"
             checked={settings.soundEnabled}
             onChange={handleSoundToggle}
           />
-          <SettingRow 
-            icon={<Music size={24} />} 
-            label="الموسيقى" 
+          <SettingRow
+            icon={<Music size={24} />}
+            label="الموسيقى"
             checked={settings.musicEnabled}
             onChange={handleMusicToggle}
           />
-          <SettingRow 
-            icon={<Lightbulb size={24} />} 
-            label="التلميحات الذكية" 
+          <SettingRow
+            icon={<Lightbulb size={24} />}
+            label="التلميحات الذكية"
             checked={settings.showHints}
             onChange={(v) => updateSettings({ showHints: v })}
           />
         </div>
 
-        {/* Default Game Mode */}
         <div className="w-full bg-white/10 rounded-xl p-4">
           <h3 className="text-white font-bold mb-3 flex items-center gap-2">
             <Target size={20} className="gold-accent" />
@@ -77,7 +76,6 @@ export default function SettingsScreen() {
           </div>
         </div>
 
-        {/* Default Target Score */}
         {settings.gameMode === 'points' && (
           <div className="w-full bg-white/10 rounded-xl p-4">
             <h3 className="text-white font-bold mb-3">الهدف الافتراضي</h3>
@@ -97,25 +95,27 @@ export default function SettingsScreen() {
           </div>
         )}
 
-        {/* Default Timer */}
         <div className="w-full bg-white/10 rounded-xl p-4">
           <h3 className="text-white font-bold mb-3 flex items-center gap-2">
             <Timer size={20} className="gold-accent" />
             الزمن الافتراضي
           </h3>
           <div className="grid grid-cols-2 gap-2">
-            {timerOptions.map((mode) => (
-              <button
-                key={mode}
-                onClick={() => { soundEngine.playClick(); updateSettings({ timerMode: mode }); }}
-                className={`py-2 rounded-lg font-bold text-white transition-all text-sm ${
-                  settings.timerMode === mode ? 'bg-yellow-600 ring-2 ring-white' : 'bg-gray-700'
-                }`}
-              >
-                <span className="text-lg block">{TIMER_CONFIG[mode].icon}</span>
-                <span>{TIMER_CONFIG[mode].label}</span>
-              </button>
-            ))}
+            {timerOptions.map((mode) => {
+              const config = TIMER_CONFIG[mode]
+              return (
+                <button
+                  key={mode}
+                  onClick={() => { soundEngine.playClick(); updateSettings({ timerMode: mode }); }}
+                  className={`py-2 rounded-lg font-bold text-white transition-all text-sm ${
+                    settings.timerMode === mode ? 'bg-yellow-600 ring-2 ring-white' : 'bg-gray-700'
+                  }`}
+                >
+                  <span className="text-lg block">{config.icon || '⏱️'}</span>
+                  <span>{config.label}</span>
+                </button>
+              )
+            })}
           </div>
 
           {settings.timerMode === 'custom' && (
@@ -153,7 +153,7 @@ function SettingRow({ icon, label, checked, onChange }: { icon: React.ReactNode,
         <span className="gold-accent">{icon}</span>
         <span>{label}</span>
       </div>
-      <button 
+      <button
         onClick={() => onChange(!checked)}
         className={`w-12 h-6 rounded-full transition-colors ${checked ? 'bg-yellow-500' : 'bg-gray-600'}`}
       >

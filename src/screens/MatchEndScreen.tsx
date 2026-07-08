@@ -4,31 +4,27 @@ import { Trophy, RotateCcw, Home, Star, Award, Clock, Target } from 'lucide-reac
 import AchievementToast from '@/components/AchievementToast'
 
 export default function MatchEndScreen() {
-  const { setScreen, statistics, playerName, achievements, matchState, addRoundScore } = useGameStore()
+  const { setScreen, statistics, playerName, achievements, matchState } = useGameStore()
   const [showToast, setShowToast] = useState(false)
   const [newAchievement, setNewAchievement] = useState<typeof achievements[0] | null>(null)
 
-  const winner = sessionStorage.getItem('lastWinner') || 'الكمبيوتر'
+  const winner = sessionStorage.getItem('lastWinner') || playerName
   const points = sessionStorage.getItem('lastRoundPoints') || '0'
   const moves = sessionStorage.getItem('movesCount') || '0'
-  // FIXED: Read duration from sessionStorage
   const duration = parseInt(sessionStorage.getItem('gameDuration') || '0')
   const isPlayerWin = winner === playerName
 
-  // Check for newly unlocked achievements
   useEffect(() => {
     const stored = sessionStorage.getItem('newAchievements')
     if (stored) {
       try {
         const unlockedIds: string[] = JSON.parse(stored)
         if (unlockedIds.length > 0) {
-          // Show first achievement
           const ach = achievements.find(a => a.id === unlockedIds[0])
           if (ach) {
             setNewAchievement(ach)
             setShowToast(true)
           }
-          // Clear the stored achievements
           sessionStorage.removeItem('newAchievements')
         }
       } catch {
@@ -45,7 +41,6 @@ export default function MatchEndScreen() {
     setScreen('menu')
   }
 
-  // Format duration as MM:SS
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
@@ -54,7 +49,6 @@ export default function MatchEndScreen() {
 
   return (
     <div className="screen-container wood-bg">
-      {/* Achievement Toast */}
       {showToast && newAchievement && (
         <AchievementToast
           achievement={newAchievement}
@@ -85,7 +79,6 @@ export default function MatchEndScreen() {
             <span className="text-white/60">عدد الحركات</span>
             <span className="text-xl font-bold text-white">{moves}</span>
           </div>
-          {/* FIXED: Show duration */}
           <div className="flex justify-between items-center">
             <span className="text-white/60 flex items-center gap-2">
               <Clock size={16} /> المدة
@@ -96,7 +89,6 @@ export default function MatchEndScreen() {
             <span className="text-white/60">إجمالي الألعاب</span>
             <span className="text-xl font-bold text-white">{statistics.gamesPlayed}</span>
           </div>
-          {/* FIXED: Show best time if available */}
           {statistics.bestTime > 0 && (
             <div className="flex justify-between items-center">
               <span className="text-white/60 flex items-center gap-2">
@@ -113,11 +105,9 @@ export default function MatchEndScreen() {
           </div>
         </div>
 
-        {/* Show newly unlocked achievements */}
         {achievements.filter(a => {
           const unlocked = a.unlockedAt
           if (!unlocked) return false
-          // Show if unlocked in the last minute
           const unlockTime = new Date(unlocked).getTime()
           return Date.now() - unlockTime < 60000
         }).length > 0 && (

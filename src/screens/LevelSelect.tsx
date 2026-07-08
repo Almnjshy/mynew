@@ -70,7 +70,6 @@ export default function LevelSelect() {
           ))}
         </div>
 
-        {/* Game Mode Selection */}
         <div className="w-full">
           <h3 className="text-white text-center mb-3">نمط اللعب</h3>
           <div className="grid grid-cols-2 gap-2">
@@ -106,7 +105,6 @@ export default function LevelSelect() {
           )}
         </div>
 
-        {/* Target Score (only for points mode) */}
         {gameMode === 'points' && (
           <div className="w-full">
             <h3 className="text-white text-center mb-3">الهدف (نقطة)</h3>
@@ -126,25 +124,27 @@ export default function LevelSelect() {
           </div>
         )}
 
-        {/* Timer Selection */}
         <div className="w-full">
           <h3 className="text-white text-center mb-3 flex items-center justify-center gap-2">
             <Timer size={20} className="gold-accent" />
             الزمن
           </h3>
           <div className="grid grid-cols-2 gap-2">
-            {timerOptions.map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setTimerMode(mode)}
-                className={`game-btn py-2 text-sm flex flex-col gap-1 ${
-                  timerMode === mode ? 'game-btn-primary' : 'game-btn-secondary'
-                }`}
-              >
-                <span className="text-lg">{TIMER_CONFIG[mode].icon}</span>
-                <span>{TIMER_CONFIG[mode].label}</span>
-              </button>
-            ))}
+            {timerOptions.map((mode) => {
+              const config = TIMER_CONFIG[mode]
+              return (
+                <button
+                  key={mode}
+                  onClick={() => setTimerMode(mode)}
+                  className={`game-btn py-2 text-sm flex flex-col gap-1 ${
+                    timerMode === mode ? 'game-btn-primary' : 'game-btn-secondary'
+                  }`}
+                >
+                  <span className="text-lg">{config.icon || '⏱️'}</span>
+                  <span>{config.label}</span>
+                </button>
+              )
+            })}
           </div>
 
           {timerMode === 'custom' && (
