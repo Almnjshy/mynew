@@ -1,4 +1,6 @@
 import { BoardTile, GameState, TileEnd } from '@/types/game'
+import { useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface Props {
   state: GameState
@@ -6,13 +8,91 @@ interface Props {
   selectedTileIndex: number | null
 }
 
+/**
+ * Get Unicode domino character for a tile
+ */
+function getUnicodeChar(top: number, bottom: number, isHorizontal: boolean): string {
+  const base = isHorizontal ? 0x1F030 : 0x1F062
+  const normalizedTop = Math.min(top, bottom)
+  const normalizedBottom = Math.max(top, bottom)
+  const offset = normalizedTop * 7 + normalizedBottom
+  return String.fromCodePoint(base + offset)
+}
+
+/**
+ * Calculate connector line between two adjacent tiles
+ */
+function getConnectorLine(
+  fromTile: BoardTile, 
+  toTile: BoardTile
+): { x1: number; y1: number; x2: number; y2: number } | null {
+  const fromIsH = fromTile.rotation === 90 || fromTile.rotation === 270
+  const toIsH = toTile.rotation === 90 || toTile.rotation === 270
+
+  const fromW = fromIsH ? 72 : 36
+  const fromH = fromIsH ? 36 : 72
+  const toW = toIsH ? 72 : 36
+  const toH = toIsH ? 36 : 72
+
+  // Calculate edge centers
+  const edges = [
+    { 
+      from: { x: fromTile.x + fromW/2, y: fromTile.y },
+      to: { x: toTile.x - toW/2, y: toTile.y },
+      dist: Math.hypot((fromTile.x + fromW/2) - (toTile.x - toW/2), fromTile.y - toTile.y)
+    },
+    { 
+      from: { x: fromTile.x - fromW/2, y: fromTile.y },
+      to: { x: toTile.x + toW/2, y: toTile.y },
+      dist: Math.hypot((fromTile.x - fromW/2) - (toTile.x + toW/2), fromTile.y - toTile.y)
+    },
+    { 
+      from: { x: fromTile.x, y: fromTile.y - fromH/2 },
+      to: { x: toTile.x, y: toTile.y + toH/2 },
+      dist: Math.hypot(fromTile.x - toTile.x, (fromTile.y - fromH/2) - (toTile.y + toH/2))
+    },
+    { 
+      from: { x: fromTile.x, y: fromTile.y + fromH/2 },
+      to: { x: toTile.x, y: toTile.y - toH/2 },
+      dist: Math.hypot(fromTile.x - toTile.x, (fromTile.y + fromH/2) - (toTile.y - toH/2))
+    },
+  ]
+
+  const best = edges.reduce((min, e) => e.dist < min.dist ? e : min, edges[0])
+
+  if (best.dist > 100) return null
+
+  return {
+    x1: best.from.x,
+    y1: best.from.y,
+    x2: best.to.x,
+    y2: best.to.y,
+  }
+}
+
 export default function SnakeBoard({ state, onPlayTile, selectedTileIndex }: Props) {
   const { board, bounds, leftHead, rightHead } = state
 
+  // Calculate connector lines between adjacent tiles
+  const connectors = useMemo(() => {
+    const lines: Array<{ x1: number; y1: number; x2: number; y2: number; key: string }> = []
+    for (let i = 0; i < board.length - 1; i++) {
+      const line = getConnectorLine(board[i], board[i + 1])
+      if (line) {
+        lines.push({ ...line, key: `conn-${board[i].id}-${board[i+1].id}` })
+      }
+    }
+    return lines
+  }, [board])
+
   if (board.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full min-h-[300px] bg-[#1b4d3e] rounded-xl text-white/40 font-bold">
-        لوحة اللعب فارغة. العب قطعة الدبل الأولى للبدء!
+      <div className="flex items-center justify-center h-full min-h-[300px] bg-[#1b4d3e] rounded-xl text-white/40 font-bold text-lg">
+        <div className="text-center">
+          <div className="text-4xl mb-2">🎲</div>
+          <div>لوحة اللعب فارغة</div>
+          <div className="text-sm mt-1">ابدأ بقطعة الدبل (التؤام) للبدء!</div>
+        </div>
       </div>
     )
   }
@@ -22,8 +102,8 @@ export default function SnakeBoard({ state, onPlayTile, selectedTileIndex }: Pro
   const safeMinY = bounds?.minY ?? -300
   const safeMaxY = bounds?.maxY ?? 300
 
-  const canvasWidth = safeMaxX - safeMinX
-  const canvasHeight = safeMaxY - safeMinY
+  const canvasWidth = Math.max(safeMaxX - safeMinX, 200)
+  const canvasHeight = Math.max(safeMaxY - safeMinY, 200)
 
   const getCanvasCoords = (x: number, y: number) => {
     return {
@@ -33,94 +113,160 @@ export default function SnakeBoard({ state, onPlayTile, selectedTileIndex }: Pro
   }
 
   return (
-    <div className="w-full h-full min-h-[300px] overflow-auto bg-[#133b2f] rounded-xl shadow-2xl p-6 relative border-4 border-[#0b241d]">
+    <div className="w-full h-full min-h-[300px] overflow-auto bg-[#133b2f] rounded-xl shadow-2xl p-4 relative border-4 border-[#0b241d]">
       <div
-        className="relative bg-[#1b4d3e] rounded-lg shadow-inner transition-all duration-300 pattern-grid"
-        style={{ width: `${canvasWidth}px`, height: `${canvasHeight}px` }}
+        className="relative bg-[#1b4d3e] rounded-lg shadow-inner transition-all duration-500"
+        style={{ 
+          width: `${canvasWidth}px`, 
+          height: `${canvasHeight}px`,
+          minWidth: '100%',
+          minHeight: '100%'
+        }}
       >
-        {board.map((tile) => {
-          const isHorizontal = tile.rotation === 90 || tile.rotation === 270
-          const currentWidth = isHorizontal ? 72 : 36
-          const currentHeight = isHorizontal ? 36 : 72
-          const coords = getCanvasCoords(tile.x, tile.y)
+        {/* SVG Connector Lines */}
+        <svg 
+          className="absolute top-0 left-0 w-full h-full pointer-events-none" 
+          style={{ overflow: 'visible' }}
+        >
+          {connectors.map((conn) => (
+            <line
+              key={conn.key}
+              x1={conn.x1 - safeMinX}
+              y1={conn.y1 - safeMinY}
+              x2={conn.x2 - safeMinX}
+              y2={conn.y2 - safeMinY}
+              stroke="#c4a35a"
+              strokeWidth="3"
+              strokeLinecap="round"
+              opacity="0.8"
+            />
+          ))}
+        </svg>
 
-          return (
-            <div
-              key={tile.id}
-              className="absolute transition-all duration-300 ease-out flex items-center justify-center"
-              style={{
-                left: coords.left,
-                top: coords.top,
-                width: `${currentWidth}px`,
-                height: `${currentHeight}px`,
-                transform: 'translate(-50%, -50%)',
-              }}
-            >
-              <div
-                className="w-[36px] h-[72px] bg-[#f5f0e6] border-2 border-[#8b7355] rounded-md flex flex-col overflow-hidden shadow-md origin-center"
-                style={{ transform: `rotate(${tile.rotation || 0}deg)` }}
+        {/* Board Tiles with Framer Motion */}
+        <AnimatePresence>
+          {board.map((tile, index) => {
+            const isHorizontal = tile.rotation === 90 || tile.rotation === 270
+            const currentWidth = isHorizontal ? 72 : 36
+            const currentHeight = isHorizontal ? 36 : 72
+            const coords = getCanvasCoords(tile.x, tile.y)
+            const isFirst = index === 0
+            const isLast = index === board.length - 1
+
+            return (
+              <motion.div
+                key={tile.id}
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0, opacity: 0 }}
+                transition={{ 
+                  type: "spring",
+                  stiffness: 260,
+                  damping: 20,
+                  delay: index * 0.05
+                }}
+                className="absolute flex items-center justify-center"
+                style={{
+                  left: coords.left,
+                  top: coords.top,
+                  width: `${currentWidth}px`,
+                  height: `${currentHeight}px`,
+                  transform: 'translate(-50%, -50%)',
+                  zIndex: 10,
+                }}
               >
-                <div className="flex-1 flex items-center justify-center relative border-b border-[#8b7355]/30">
-                  <Dots count={tile.top} />
+                {/* Unicode Tile */}
+                <div
+                  className="flex items-center justify-center select-none"
+                  style={{ 
+                    width: isHorizontal ? '72px' : '36px',
+                    height: isHorizontal ? '36px' : '72px',
+                    transform: `rotate(${tile.rotation || 0}deg)`,
+                    fontSize: isHorizontal ? '3.5rem' : '2.5rem',
+                    lineHeight: 1,
+                    filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
+                  }}
+                >
+                  {getUnicodeChar(tile.top, tile.bottom, isHorizontal)}
                 </div>
-                <div className="flex-1 flex items-center justify-center relative">
-                  <Dots count={tile.bottom} />
-                </div>
-              </div>
-            </div>
-          )
-        })}
 
-        {selectedTileIndex !== null && onPlayTile && (
+                {/* Matching number indicator */}
+                {(isFirst || isLast) && (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-400/90 text-black whitespace-nowrap"
+                  >
+                    {isFirst ? tile.startValue : tile.endValue}
+                  </motion.div>
+                )}
+              </motion.div>
+            )
+          })}
+        </AnimatePresence>
+
+        {/* Play Hints - Drop zones for selected tile */}
+        {selectedTileIndex !== null && onPlayTile && board.length > 0 && (
           <>
-            <div
-              className="absolute w-12 h-12 bg-yellow-400/30 border-2 border-dashed border-yellow-400 rounded-full animate-ping cursor-pointer flex items-center justify-center"
+            {/* Left Drop Zone */}
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className="absolute w-14 h-14 bg-yellow-400/20 border-2 border-dashed border-yellow-400 rounded-full cursor-pointer flex items-center justify-center hover:bg-yellow-400/40 transition-colors"
               style={{
                 ...getCanvasCoords(leftHead?.x ?? 0, leftHead?.y ?? 0),
                 transform: 'translate(-50%, -50%)',
+                zIndex: 20,
               }}
               onClick={() => onPlayTile(selectedTileIndex, 'left')}
               title="العب في الطرف الأيسر"
-            />
+              whileHover={{ scale: 1.2 }}
+              whileTap={{ scale: 0.9 }}
+            >
+              <span className="text-yellow-300 text-xs font-bold">←</span>
+            </motion.div>
 
-            <div
-              className="absolute w-12 h-12 bg-cyan-400/30 border-2 border-dashed border-cyan-400 rounded-full animate-ping cursor-pointer flex items-center justify-center"
+            {/* Right Drop Zone */}
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className="absolute w-14 h-14 bg-cyan-400/20 border-2 border-dashed border-cyan-400 rounded-full cursor-pointer flex items-center justify-center hover:bg-cyan-400/40 transition-colors"
               style={{
                 ...getCanvasCoords(rightHead?.x ?? 0, rightHead?.y ?? 0),
                 transform: 'translate(-50%, -50%)',
+                zIndex: 20,
               }}
               onClick={() => onPlayTile(selectedTileIndex, 'right')}
               title="العب في الطرف الأيمن"
-            />
+              whileHover={{ scale: 1.2 }}
+              whileTap={{ scale: 0.9 }}
+            >
+              <span className="text-cyan-300 text-xs font-bold">→</span>
+            </motion.div>
           </>
         )}
+
+        {/* First move hint */}
+        {selectedTileIndex !== null && onPlayTile && board.length === 0 && (
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: [1, 1.2, 1] }}
+            transition={{ repeat: Infinity, duration: 1.5 }}
+            className="absolute w-16 h-16 bg-green-400/20 border-2 border-dashed border-green-400 rounded-full cursor-pointer flex items-center justify-center hover:bg-green-400/40 transition-colors"
+            style={{
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 20,
+            }}
+            onClick={() => onPlayTile(selectedTileIndex, 'left')}
+            title="ابدأ اللعب هنا"
+            whileTap={{ scale: 0.9 }}
+          >
+            <span className="text-green-300 text-xs font-bold">ابدأ</span>
+          </motion.div>
+        )}
       </div>
-    </div>
-  )
-}
-
-function Dots({ count }: { count: number }) {
-  const positions: Record<number, string[]> = {
-    0: [], 1: ['c'], 2: ['tl','br'], 3: ['tl','c','br'],
-    4: ['tl','tr','bl','br'], 5: ['tl','tr','c','bl','br'],
-    6: ['tl','tr','ml','mr','bl','br']
-  }
-
-  const posMap: Record<string, React.CSSProperties> = {
-    'tl': { top: '15%', left: '15%' },
-    'tr': { top: '15%', right: '15%' },
-    'ml': { top: '50%', left: '15%', transform: 'translateY(-50%)' },
-    'mr': { top: '50%', right: '15%', transform: 'translateY(-50%)' },
-    'c':  { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' },
-    'bl': { bottom: '15%', left: '15%' },
-    'br': { bottom: '15%', right: '15%' },
-  }
-
-  return (
-    <div className="relative w-full h-full p-1">
-      {(positions[count] || []).map((p, i) => (
-        <div key={i} className="absolute w-[20%] h-[20%] bg-[#1a1a2e] rounded-full" style={posMap[p]} />
-      ))}
     </div>
   )
 }
