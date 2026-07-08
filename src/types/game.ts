@@ -1,7 +1,3 @@
-// ============================================================
-// TYPES & INTERFACES
-// ============================================================
-
 export type TileEnd = 'left' | 'right'
 export type Direction = 'right' | 'left' | 'up' | 'down'
 export type GameMode = 'classic' | 'points' | 'block' | 'allFives' | 'draw'
@@ -68,15 +64,14 @@ export interface MoveResult {
 }
 
 // ============================================================
-// CONSTANTS (المفقودة التي سببت الخطأ)
+// الثوابت التي تحتاجها القوائم (وهي التي كانت مفقودة وتسبب الخطأ)
 // ============================================================
-
 export const TIMER_CONFIG: Record<TimerMode, { label: string; time: number }> = {
   off: { label: 'بدون مؤقت', time: 0 },
   standard: { label: 'قياسي (60 ثانية)', time: 60 },
   fast: { label: 'سريع (30 ثانية)', time: 30 },
   blitz: { label: 'خاطف (15 ثانية)', time: 15 },
-  custom: { label: 'مخصص', time: 60 }, // القيمة الافتراضية للمخصص
+  custom: { label: 'مخصص', time: 60 },
 }
 
 export const GAME_MODE_CONFIG: Record<GameMode, { label: string; icon: string; description: string }> = {
