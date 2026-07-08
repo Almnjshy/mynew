@@ -16,8 +16,7 @@ import { soundEngine } from '@/lib/soundEngine'
 export default function GameScreen() {
   const { 
     setScreen, settings, updateStatistics, checkAndUnlockAchievements,
-    playerName, playerAvatar, matchState, addRoundScore, initMatchState,
-    statistics
+    playerName, playerAvatar, statistics
   } = useGameStore()
 
   const [gameState, setGameState] = useState<GameState | null>(null)
@@ -29,7 +28,7 @@ export default function GameScreen() {
   const [bestMove, setBestMove] = useState<{ tileIndex: number; end: TileEnd } | null>(null)
   const [timerKey, setTimerKey] = useState(0)
 
-  // --- 🔧 إصلاح مهلة القياس (ضمان قيمة أولية آمنة) ---
+  // 🔧 قياس عرض الحاوية
   const containerRef = useRef<HTMLDivElement>(null)
   const [availableWidth, setAvailableWidth] = useState<number>(
     typeof window !== 'undefined' ? window.innerWidth - 60 : 600
@@ -65,6 +64,7 @@ export default function GameScreen() {
     return Array(count).fill('/assets/avatar_ai.png')
   }, [])
 
+  // Initialize game
   useEffect(() => {
     const aiCount = Math.min(Math.max(settings.aiCount || 1, 1), 4)
     const aiNames = getAINames(aiCount)
@@ -84,7 +84,7 @@ export default function GameScreen() {
     setTimerKey(prev => prev + 1)
   }, [playerName, playerAvatar, settings.aiCount])
 
-  // تمرير availableWidth للتلميحات
+  // Hints (تمرير availableWidth)
   useEffect(() => {
     if (!gameState || gameState.isGameOver || roundEnded) {
       setHintMessage('')
@@ -107,7 +107,7 @@ export default function GameScreen() {
     }
   }, [gameState, settings.showHints, roundEnded, availableWidth])
 
-  // تمرير availableWidth لدور الذكاء الاصطناعي
+  // AI Turn (تمرير availableWidth)
   useEffect(() => {
     if (!gameState || gameState.isGameOver || roundEnded) return
     if (gameState.currentPlayerIndex === 0) return
@@ -230,7 +230,6 @@ export default function GameScreen() {
 
   const handlePlayTile = (end: TileEnd) => {
     if (selectedTile === null || !gameState || roundEnded) return
-    // تمرير availableWidth الحقيقي
     const result = playTile(gameState, 0, selectedTile, end, availableWidth)
     if (result.valid && result.newState) {
       soundEngine.playTilePlace()
@@ -305,6 +304,7 @@ export default function GameScreen() {
 
   return (
     <div className="screen-container table-bg">
+      {/* Header */}
       <div className="w-full flex items-center justify-between px-4 py-2">
         <button onClick={handleExit} className="text-white/60 p-2"><ArrowLeft size={24} /></button>
         <div className="text-center">
@@ -320,6 +320,7 @@ export default function GameScreen() {
         <div className="w-full px-4 mb-1"><TimerBar key={timerKey} duration={timeLimit} onTimeUp={handleTimeUp} isActive={isPlayerTurn} /></div>
       )}
 
+      {/* Opponents */}
       <div className="w-full px-4 py-1">
         <div className="flex items-center justify-center gap-3 flex-wrap">
           {gameState.players.slice(1).map((opponent, idx) => (
@@ -333,9 +334,9 @@ export default function GameScreen() {
         </div>
       </div>
 
-      {/* 🔧 تم وضع الـ ref هنا لضمان القياس الصحيح عند التحميل الأول */}
+      {/* Snake Board */}
       <div ref={containerRef} className="flex-1 flex items-center justify-center px-2 py-2 overflow-hidden">
-        <SnakeBoard board={gameState.board} />
+        <SnakeBoard state={gameState} selectedTileIndex={selectedTile} onPlayTile={handlePlayTile} />
       </div>
 
       {message && <div className="text-center px-4 py-1 text-sm font-medium text-yellow-400">{message}</div>}
@@ -343,12 +344,14 @@ export default function GameScreen() {
         <div className="text-center px-4 py-1"><span className="text-white/50 text-xs flex items-center justify-center gap-1"><Lightbulb size={12} />{hintMessage}</span></div>
       )}
 
+      {/* Player Info */}
       <div className="flex items-center gap-3 px-4 py-2">
         <div className="w-10 h-10 rounded-full bg-yellow-500/20 overflow-hidden border-2 border-yellow-500"><img src={player.avatar} alt="" className="w-full h-full object-cover" /></div>
         <div className="text-right"><div className="text-yellow-400 font-medium text-sm">{player.name}</div><div className="text-white/40 text-xs">{player.hand.length} قطعة</div></div>
         {settings.gameMode === 'allFives' && <div className="mr-auto text-yellow-400 font-bold">{player.score} نقطة</div>}
       </div>
 
+      {/* Player Hand */}
       <div className="w-full px-4 pb-2">
         <div className="player-hand justify-center">
           {player.hand.map((tile, index) => {
@@ -371,6 +374,7 @@ export default function GameScreen() {
         </div>
       </div>
 
+      {/* Action Buttons */}
       <div className="flex gap-2 px-4 pb-4">
         <button onClick={handleDraw} disabled={!isPlayerTurn || roundEnded || gameState.stock.length === 0} className="game-btn game-btn-secondary flex-1 text-sm">سحب ({gameState.stock.length})</button>
         <button onClick={handleSkip} disabled={!isPlayerTurn || roundEnded} className="game-btn game-btn-secondary flex-1 text-sm">تخطي</button>
