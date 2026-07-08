@@ -17,17 +17,14 @@ export default function SnakeBoard({ state, onPlayTile, selectedTileIndex }: Pro
     )
   }
 
-  // تأمين احتياطي في حال لم يتم حساب الـ bounds بعد (ضمان عدم انهيار الـ UI)
   const safeMinX = bounds?.minX ?? -400
   const safeMaxX = bounds?.maxX ?? 400
   const safeMinY = bounds?.minY ?? -300
   const safeMaxY = bounds?.maxY ?? 300
 
-  // حساب العرض والارتفاع الكلي الفعلي للـ Canvas بناءً على حركة القطع
   const canvasWidth = safeMaxX - safeMinX
   const canvasHeight = safeMaxY - safeMinY
 
-  // دالة لمطابقة إحداثيات المحرك إلى نظام شبكة الـ DOM الفعلي داخل الكانفاس الممتد
   const getCanvasCoords = (x: number, y: number) => {
     return {
       left: `${x - safeMinX}px`,
@@ -36,16 +33,11 @@ export default function SnakeBoard({ state, onPlayTile, selectedTileIndex }: Pro
   }
 
   return (
-    /* تم تغيير h-[550px] إلى h-full ليتمدد حسب مساحة الشاشة المتاحة */
     <div className="w-full h-full min-h-[300px] overflow-auto bg-[#133b2f] rounded-xl shadow-2xl p-6 relative border-4 border-[#0b241d]">
-
-      {/* الكانفاس الداخلي الديناميكي المتمدد هندسياً */}
-      <div 
+      <div
         className="relative bg-[#1b4d3e] rounded-lg shadow-inner transition-all duration-300 pattern-grid"
         style={{ width: `${canvasWidth}px`, height: `${canvasHeight}px` }}
       >
-
-        {/* تصيير قطع الدومينو */}
         {board.map((tile) => {
           const isHorizontal = tile.rotation === 90 || tile.rotation === 270
           const currentWidth = isHorizontal ? 72 : 36
@@ -61,11 +53,10 @@ export default function SnakeBoard({ state, onPlayTile, selectedTileIndex }: Pro
                 top: coords.top,
                 width: `${currentWidth}px`,
                 height: `${currentHeight}px`,
-                transform: 'translate(-50%, -50%)', // تمركز المركز المطلق بدقة متناهية
+                transform: 'translate(-50%, -50%)',
               }}
             >
-              {/* غلاف الدوران الصافي لمنع انزياح البنية الداخلية */}
-              <div 
+              <div
                 className="w-[36px] h-[72px] bg-[#f5f0e6] border-2 border-[#8b7355] rounded-md flex flex-col overflow-hidden shadow-md origin-center"
                 style={{ transform: `rotate(${tile.rotation || 0}deg)` }}
               >
@@ -80,25 +71,22 @@ export default function SnakeBoard({ state, onPlayTile, selectedTileIndex }: Pro
           )
         })}
 
-        {/* نقاط الإسقاط المضيئة التفاعلية (Drop Zones) عند تحديد قطعة معينة في يد اللاعب */}
         {selectedTileIndex !== null && onPlayTile && (
           <>
-            {/* منطقة إسقاط الجانب الأيسر */}
             <div
               className="absolute w-12 h-12 bg-yellow-400/30 border-2 border-dashed border-yellow-400 rounded-full animate-ping cursor-pointer flex items-center justify-center"
               style={{
-                ...getCanvasCoords(leftHead.x, leftHead.y),
+                ...getCanvasCoords(leftHead?.x ?? 0, leftHead?.y ?? 0),
                 transform: 'translate(-50%, -50%)',
               }}
               onClick={() => onPlayTile(selectedTileIndex, 'left')}
               title="العب في الطرف الأيسر"
             />
 
-            {/* منطقة إسقاط الجانب الأيمن */}
             <div
               className="absolute w-12 h-12 bg-cyan-400/30 border-2 border-dashed border-cyan-400 rounded-full animate-ping cursor-pointer flex items-center justify-center"
               style={{
-                ...getCanvasCoords(rightHead.x, rightHead.y),
+                ...getCanvasCoords(rightHead?.x ?? 0, rightHead?.y ?? 0),
                 transform: 'translate(-50%, -50%)',
               }}
               onClick={() => onPlayTile(selectedTileIndex, 'right')}
@@ -106,7 +94,6 @@ export default function SnakeBoard({ state, onPlayTile, selectedTileIndex }: Pro
             />
           </>
         )}
-
       </div>
     </div>
   )
