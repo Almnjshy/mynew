@@ -391,7 +391,6 @@ export default function GameScreen() {
   return (
     <div className="screen-container table-bg" ref={containerRef}>
       <div className="flex flex-col h-full w-full max-w-lg mx-auto">
-        {/* Header */}
         <div className="flex items-center justify-between p-3 bg-black/30 backdrop-blur-sm">
           <button onClick={() => { soundEngine.playClick(); setScreen('menu'); }} className="text-white p-2 hover:bg-white/10 rounded-lg transition-colors">
             <ArrowLeft size={24} />
@@ -407,7 +406,6 @@ export default function GameScreen() {
           </button>
         </div>
 
-        {/* Timer */}
         {timeLimit > 0 && !roundEnded && (
           <div className="px-3 pt-2">
             <TimerBar
@@ -419,14 +417,12 @@ export default function GameScreen() {
           </div>
         )}
 
-        {/* Message */}
         {message && (
           <div className="mx-3 mt-2 px-3 py-1.5 bg-yellow-500/20 border border-yellow-500/40 rounded-lg text-yellow-300 text-sm text-center">
             {message}
           </div>
         )}
 
-        {/* AI Thinking */}
         {aiThinking && (
           <div className="text-center py-2">
             <div className="inline-flex items-center gap-2 text-white/60 text-sm">
@@ -436,7 +432,6 @@ export default function GameScreen() {
           </div>
         )}
 
-        {/* Board */}
         <div className="flex-1 min-h-0 px-3 py-2">
           <SnakeBoard
             state={gameState}
@@ -445,7 +440,6 @@ export default function GameScreen() {
           />
         </div>
 
-        {/* Hint */}
         {hintMessage && !roundEnded && (
           <div className="mx-3 mb-2 px-3 py-1.5 bg-blue-500/20 border border-blue-500/40 rounded-lg text-blue-300 text-xs text-center flex items-center justify-center gap-2">
             <Lightbulb size={14} />
@@ -453,7 +447,6 @@ export default function GameScreen() {
           </div>
         )}
 
-        {/* Player Hand */}
         <div className="bg-black/40 backdrop-blur-sm p-3">
           <div className="flex items-center justify-between mb-2">
             <div className="text-white text-sm font-bold">{playerName}</div>
@@ -487,7 +480,6 @@ export default function GameScreen() {
             })}
           </div>
 
-          {/* Action Buttons */}
           {isPlayerTurn && !roundEnded && !aiThinking && (
             <div className="flex gap-2 mt-2">
               {selectedTile !== null && (
