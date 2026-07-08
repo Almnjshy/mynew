@@ -1,24 +1,35 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useGameStore } from '@/store/gameStore'
-import { 
-  createInitialState, playTile, drawFromStock, getValidEnds, getAIMove, 
+import {
+  createInitialState, playTile, drawFromStock, getValidEnds, getAIMove,
   calculateScore, isGameBlocked, getBlockedWinner, canPlayerPlay, skipTurn,
   getBoardEnds
 } from '@/lib/gameEngine'
-import { getBestMove, getHintMessage, shouldDraw } from '@/lib/hintEngine'
-import { GameState, DominoTile, TileEnd, TIMER_CONFIG, BoardTile } from '@/types/game'
-import { ArrowLeft, RotateCcw, Trophy, Lightbulb, Users, User } from 'lucide-react'
+import { getBestMove, getHintMessage } from '@/lib/hintEngine'
+import { GameState, DominoTile, TileEnd, TIMER_CONFIG } from '@/types/game'
+import { ArrowLeft, RotateCcw, Lightbulb } from 'lucide-react'
 import TimerBar from '@/components/TimerBar'
 import SnakeBoard from '@/components/SnakeBoard'
 import DominoTileComponent from '@/components/DominoTile'
 import { soundEngine } from '@/lib/soundEngine'
 
 export default function GameScreen() {
-  const { 
-    setScreen, settings, updateStatistics, checkAndUnlockAchievements,
-    playerName, playerAvatar, matchState, addRoundScore, initMatchState,
-    statistics
-  } = useGameStore()
+  const store = useGameStore()
+  const setScreen = store?.setScreen || (() => {})
+  const settings = store?.settings || {
+    aiCount: 1,
+    timerMode: 'off',
+    customTime: 60,
+    gameMode: 'classic',
+    showHints: true,
+    difficulty: 'medium'
+  }
+  const updateStatistics = store?.updateStatistics || (() => {})
+  const checkAndUnlockAchievements = store?.checkAndUnlockAchievements || (() => [])
+  const playerName = store?.playerName || 'لاعب'
+  const playerAvatar = store?.playerAvatar || ''
+  const addHistoryEntry = store?.addHistoryEntry || (() => {})
+  const addLeaderboardEntry = store?.addLeaderboardEntry || (() => {})
 
   const [gameState, setGameState] = useState<GameState | null>(null)
   const [selectedTile, setSelectedTile] = useState<number | null>(null)
@@ -29,17 +40,33 @@ export default function GameScreen() {
   const [bestMove, setBestMove] = useState<{ tileIndex: number; end: TileEnd } | null>(null)
   const [timerKey, setTimerKey] = useState(0)
 
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [availableWidth, setAvailableWidth] = useState<number>(
+    typeof window !== 'undefined' ? window.innerWidth - 60 : 600
+  )
+
+  useEffect(() => {
+    const updateWidth = () => {
+      if (containerRef.current) {
+        setAvailableWidth(containerRef.current.clientWidth)
+      }
+    }
+    updateWidth()
+    window.addEventListener('resize', updateWidth)
+    return () => window.removeEventListener('resize', updateWidth)
+  }, [])
+
   const moveCountRef = useRef(0)
   const playerDrawCountRef = useRef(0)
   const playerHasDrawnRef = useRef(false)
 
   const getTimeLimit = useCallback(() => {
+    if (!settings) return 0
     if (settings.timerMode === 'off') return 0
     if (settings.timerMode === 'custom') return settings.customTime
-    return TIMER_CONFIG[settings.timerMode].time
-  }, [settings.timerMode, settings.customTime])
+    return TIMER_CONFIG[settings.timerMode]?.time || 0
+  }, [settings])
 
-  // Generate AI names based on count
   const getAINames = useCallback((count: number): string[] => {
     const names = ['الكمبيوتر', 'الذكي', 'المحارب', 'الأسطورة', 'البطل']
     return names.slice(0, count)
@@ -49,54 +76,61 @@ export default function GameScreen() {
     return Array(count).fill('/assets/avatar_ai.png')
   }, [])
 
-  // Initialize game
   useEffect(() => {
-    const aiCount = Math.min(Math.max(settings.aiCount || 1, 1), 4)
-    const aiNames = getAINames(aiCount)
-    const aiAvatars = getAIAvatars(aiCount)
+    try {
+      const aiCount = Math.min(Math.max(settings?.aiCount || 1, 1), 4)
+      const aiNames = getAINames(aiCount)
+      const aiAvatars = getAIAvatars(aiCount)
 
-    const allNames = [playerName, ...aiNames]
-    const allAvatars = [playerAvatar, ...aiAvatars]
+      const allNames = [playerName || 'أنت', ...aiNames]
+      const allAvatars = [playerAvatar || '', ...aiAvatars]
 
-    const state = createInitialState(allNames, allAvatars)
-    setGameState(state)
-    moveCountRef.current = 0
-    playerDrawCountRef.current = 0
-    playerHasDrawnRef.current = false
-    setRoundEnded(false)
-    setHintMessage('')
-    setBestMove(null)
-    setTimerKey(prev => prev + 1)
-  }, [playerName, playerAvatar, settings.aiCount])
+      const state = createInitialState(allNames, allAvatars)
+      setGameState(state)
+      moveCountRef.current = 0
+      playerDrawCountRef.current = 0
+      playerHasDrawnRef.current = false
+      setRoundEnded(false)
+      setHintMessage('')
+      setBestMove(null)
+      setTimerKey(prev => prev + 1)
+      setMessage('')
+    } catch (error) {
+      console.error('خطأ أثناء تهيئة اللعبة:', error)
+      setMessage('حدث خطأ أثناء بدء اللعبة. حاول إعادة المحاولة.')
+    }
+  }, [playerName, playerAvatar, settings, getAINames, getAIAvatars])
 
-  // Hints
   useEffect(() => {
     if (!gameState || gameState.isGameOver || roundEnded) {
       setHintMessage('')
       setBestMove(null)
       return
     }
-
-    if (gameState.currentPlayerIndex === 0 && settings.showHints) {
-      const hint = getBestMove(gameState, 0)
-      if (hint) {
-        setBestMove({ tileIndex: hint.tileIndex, end: hint.end })
-        setHintMessage(hint.reason)
-      } else {
-        const msg = getHintMessage(gameState, 0)
-        setHintMessage(msg)
+    if (gameState.currentPlayerIndex === 0 && settings?.showHints) {
+      try {
+        const hint = getBestMove(gameState, 0)
+        if (hint) {
+          setBestMove({ tileIndex: hint.tileIndex, end: hint.end })
+          setHintMessage(hint.reason)
+        } else {
+          const msg = getHintMessage(gameState, 0)
+          setHintMessage(msg)
+          setBestMove(null)
+        }
+      } catch {
+        setHintMessage('')
         setBestMove(null)
       }
     } else {
       setHintMessage('')
       setBestMove(null)
     }
-  }, [gameState, settings.showHints, roundEnded])
+  }, [gameState, settings?.showHints, roundEnded])
 
-  // AI Turn - handles ALL AI players (not just player 1)
   useEffect(() => {
     if (!gameState || gameState.isGameOver || roundEnded) return
-    if (gameState.currentPlayerIndex === 0) return // Player's turn
+    if (gameState.currentPlayerIndex === 0) return
 
     const currentPlayer = gameState.players[gameState.currentPlayerIndex]
     if (!currentPlayer || !currentPlayer.isAI) return
@@ -105,20 +139,19 @@ export default function GameScreen() {
     setAiThinking(true)
 
     const timer = setTimeout(() => {
-      handleAITurn(currentPlayer.id)
+      handleAITurn(currentPlayer.id, availableWidth)
     }, 1500)
 
     return () => clearTimeout(timer)
-  }, [gameState, settings.difficulty, roundEnded, settings.gameMode])
+  }, [gameState, settings?.difficulty, roundEnded, settings?.gameMode, availableWidth])
 
-  const handleAITurn = (playerId: string) => {
+  const handleAITurn = useCallback((playerId: string, containerWidth: number) => {
     if (!gameState) return
     const playerIndex = gameState.players.findIndex(p => p.id === playerId)
     if (playerIndex === -1) return
 
     const currentPlayer = gameState.players[playerIndex]
 
-    // Check if game is blocked
     if (isGameBlocked(gameState)) {
       const blockedWinner = getBlockedWinner(gameState)
       handleRoundEnd(blockedWinner?.id === 'player-0')
@@ -126,8 +159,7 @@ export default function GameScreen() {
       return
     }
 
-    // Block mode: skip if can't play
-    if (settings.gameMode === 'block' && !canPlayerPlay(gameState, playerIndex)) {
+    if (settings?.gameMode === 'block' && !canPlayerPlay(gameState, playerIndex)) {
       const newState = skipTurn(gameState)
       setGameState(newState)
       setMessage(`${currentPlayer.name} لا يستطيع اللعب - تخطي`)
@@ -136,29 +168,21 @@ export default function GameScreen() {
       return
     }
 
-    // Get AI move
-    const aiMove = getAIMove(gameState, playerIndex, settings.difficulty)
+    const aiMove = getAIMove(gameState, playerIndex, settings?.difficulty || 'medium')
 
     if (aiMove) {
-      const result = playTile(gameState, playerIndex, aiMove.tileIndex, aiMove.end)
+      const result = playTile(gameState, playerIndex, aiMove.tileIndex, aiMove.end, containerWidth)
       if (result.valid && result.newState) {
         moveCountRef.current += 1
-
-        if (settings.gameMode === 'allFives') {
+        if (settings?.gameMode === 'allFives') {
           const gained = result.newState.players[playerIndex].score - (gameState.players[playerIndex]?.score || 0)
-          if (gained > 0) {
-            setMessage(`${currentPlayer.name} حصل على ${gained} نقطة!`)
-          }
+          if (gained > 0) setMessage(`${currentPlayer.name} حصل على ${gained} نقطة!`)
         }
-
         setGameState(result.newState)
-        if (result.newState.isGameOver) {
-          handleRoundEnd(result.newState.winner?.id === 'player-0')
-        }
+        if (result.newState.isGameOver) handleRoundEnd(result.newState.winner?.id === 'player-0')
       }
     } else {
-      // Can't play - try to draw
-      if (settings.gameMode === 'draw' && gameState.stock.length > 0) {
+      if (settings?.gameMode === 'draw' && gameState.stock.length > 0) {
         let newState = drawFromStock(gameState, playerIndex)
         let drawCount = 1
         while (!canPlayerPlay(newState, playerIndex) && newState.stock.length > 0 && drawCount < 3) {
@@ -174,65 +198,86 @@ export default function GameScreen() {
       }
     }
     setAiThinking(false)
-  }
+  }, [gameState, settings])
 
-  const handleRoundEnd = (playerWon: boolean) => {
+  const handleRoundEnd = useCallback((playerWon: boolean) => {
+    if (!gameState) return
+    setRoundEnded(true)
+
     const isWin = playerWon
-    const playerScore = calculateScore(gameState?.players[0]?.hand || [])
-    const opponentScores = gameState?.players.slice(1).map(p => calculateScore(p.hand)) || []
+    const playerHand = gameState.players[0]?.hand || []
+    const playerScore = calculateScore(playerHand)
+    const opponentScores = gameState.players.slice(1).map(p => calculateScore(p.hand))
     const totalOpponentScore = opponentScores.reduce((a, b) => a + b, 0)
 
-    const finalPlayerScore = settings.gameMode === 'allFives' 
-      ? gameState?.players[0].score || 0
+    const finalPlayerScore = settings?.gameMode === 'allFives'
+      ? gameState.players[0]?.score || 0
       : (isWin ? totalOpponentScore : playerScore)
 
-    sessionStorage.setItem('lastWinner', isWin ? playerName : 'الكمبيوتر')
-    sessionStorage.setItem('lastRoundPoints', String(finalPlayerScore))
-    sessionStorage.setItem('movesCount', String(moveCountRef.current))
+    try {
+      if (typeof updateStatistics === 'function') {
+        updateStatistics({
+          gamesPlayed: 1,
+          gamesWon: isWin ? 1 : 0,
+          gamesLost: isWin ? 0 : 1,
+          totalScore: finalPlayerScore,
+          highestScore: finalPlayerScore,
+        })
+      }
 
-    // Update statistics
-    updateStatistics({
-      gamesPlayed: 1,
-      gamesWon: isWin ? 1 : 0,
-      gamesLost: isWin ? 0 : 1,
-      totalScore: finalPlayerScore,
-      highestScore: finalPlayerScore,
-    })
+      const historyEntry = {
+        id: `game-${Date.now()}`,
+        date: new Date().toISOString(),
+        playerName: playerName,
+        opponentName: gameState.players[1]?.name || 'الكمبيوتر',
+        playerScore: finalPlayerScore,
+        opponentScore: isWin ? 0 : totalOpponentScore,
+        won: isWin,
+        gameMode: settings?.gameMode || 'classic',
+        moves: moveCountRef.current,
+        duration: 0,
+      }
+      addHistoryEntry(historyEntry)
 
-    // Check achievements
-    const newlyUnlocked = checkAndUnlockAchievements({
-      totalGames: statistics.gamesPlayed + 1,
-      totalWins: statistics.gamesWon + (isWin ? 1 : 0),
-      currentStreak: isWin ? statistics.winStreak + 1 : 0,
-      bestStreak: Math.max(statistics.bestWinStreak, isWin ? statistics.winStreak + 1 : 0),
-      cleanWins: statistics.gamesWon + (isWin && !playerHasDrawnRef.current ? 1 : 0),
-      crushingWins: statistics.gamesWon + (isWin && totalOpponentScore === 0 ? 1 : 0),
-      fastestWinMoves: isWin ? moveCountRef.current : statistics.bestTime,
-      totalDraws: playerDrawCountRef.current,
-      comebacks: 0,
-    })
+      const leaderboardEntry = {
+        id: `lb-${Date.now()}`,
+        name: playerName,
+        avatar: playerAvatar,
+        score: finalPlayerScore,
+        date: new Date().toISOString(),
+        gameMode: settings?.gameMode || 'classic',
+      }
+      addLeaderboardEntry(leaderboardEntry)
 
-    if (newlyUnlocked.length > 0) {
-      sessionStorage.setItem('newAchievements', JSON.stringify(newlyUnlocked))
+      if (typeof checkAndUnlockAchievements === 'function') {
+        checkAndUnlockAchievements({
+          totalWins: isWin ? 1 : 0,
+          totalGames: 1,
+          bestStreak: isWin ? 1 : 0,
+          cleanWins: playerDrawCountRef.current === 0 && isWin ? 1 : 0,
+          crushingWins: isWin && opponentScores.every(s => s === 0) ? 1 : 0,
+          fastestWinMoves: isWin ? moveCountRef.current : 999,
+          totalDraws: playerDrawCountRef.current,
+          comebacks: 0,
+        })
+      }
+    } catch (error) {
+      console.warn('فشل تحديث الإحصائيات:', error)
     }
 
     setTimeout(() => setScreen('matchEnd'), 2000)
-  }
+  }, [gameState, settings, playerName, playerAvatar, updateStatistics, addHistoryEntry, addLeaderboardEntry, checkAndUnlockAchievements, setScreen])
 
   const handleTileClick = (index: number) => {
     if (!gameState || gameState.currentPlayerIndex !== 0 || roundEnded || aiThinking) return
-    if (selectedTile === index) {
-      setSelectedTile(null)
-      return
-    }
+    if (selectedTile === index) { setSelectedTile(null); return }
     setSelectedTile(index)
     soundEngine.playClick()
   }
 
   const handlePlayTile = (end: TileEnd) => {
     if (selectedTile === null || !gameState || roundEnded) return
-
-    const result = playTile(gameState, 0, selectedTile, end)
+    const result = playTile(gameState, 0, selectedTile, end, availableWidth)
     if (result.valid && result.newState) {
       soundEngine.playTilePlace()
       moveCountRef.current += 1
@@ -240,10 +285,7 @@ export default function GameScreen() {
       setSelectedTile(null)
       setMessage('')
       setTimerKey(prev => prev + 1)
-
-      if (result.newState.isGameOver) {
-        handleRoundEnd(result.newState.winner?.id === 'player-0')
-      }
+      if (result.newState.isGameOver) handleRoundEnd(result.newState.winner?.id === 'player-0')
     } else {
       soundEngine.playInvalid()
       setMessage(result.message || 'لا يمكن اللعب بهذه القطعة')
@@ -252,224 +294,234 @@ export default function GameScreen() {
 
   const handleDraw = () => {
     if (!gameState || gameState.currentPlayerIndex !== 0 || roundEnded) return
-    if (settings.gameMode === 'block') {
+    if (settings?.gameMode === 'block') {
       setMessage('وضع الحظر: لا يمكن السحب!')
       soundEngine.playInvalid()
       return
     }
-
     const newState = drawFromStock(gameState, 0)
     setGameState(newState)
     playerDrawCountRef.current += 1
     playerHasDrawnRef.current = true
     soundEngine.playDraw()
     setMessage('سحبت قطعة من المخزن')
-    setTimerKey(prev => prev + 1)
+    setSelectedTile(null)
+
+    if (!canPlayerPlay(newState, 0) && newState.stock.length === 0) {
+      const skipped = skipTurn(newState)
+      setGameState(skipped)
+      setMessage('لا يمكن اللعب بعد السحب - تخطي الدور')
+    }
   }
 
-  const handleTimeUp = useCallback(() => {
-    if (!gameState || gameState.currentPlayerIndex !== 0) return
-    if (gameState.stock.length > 0 && settings.gameMode !== 'block') {
-      const newState = drawFromStock(gameState, 0)
-      setGameState(newState)
-      setMessage('انتهى الوقت! سحب تلقائي')
-      playerDrawCountRef.current += 1
-      playerHasDrawnRef.current = true
-    } else {
-      const newState = skipTurn(gameState)
-      setGameState(newState)
-      setMessage('انتهى الوقت! تخطي الدور')
-    }
-    setSelectedTile(null)
-    setTimerKey(prev => prev + 1)
-  }, [gameState, settings.gameMode])
-
-  const handleSkip = () => {
+  const handlePass = () => {
     if (!gameState || gameState.currentPlayerIndex !== 0 || roundEnded) return
+    if (canPlayerPlay(gameState, 0)) {
+      setMessage('عندك قطع تقدر تلعبها!')
+      soundEngine.playInvalid()
+      return
+    }
     const newState = skipTurn(gameState)
     setGameState(newState)
+    setMessage('تخطيت دورك')
     setSelectedTile(null)
-    soundEngine.playClick()
-    setMessage('تم تخطي الدور')
     setTimerKey(prev => prev + 1)
   }
 
-  const handleExit = () => {
+  const handleTimerExpire = () => {
+    if (!gameState || gameState.currentPlayerIndex !== 0 || roundEnded) return
+    if (canPlayerPlay(gameState, 0)) {
+      const aiMove = getAIMove(gameState, 0, 'easy')
+      if (aiMove) {
+        const result = playTile(gameState, 0, aiMove.tileIndex, aiMove.end, availableWidth)
+        if (result.valid && result.newState) {
+          setGameState(result.newState)
+          setMessage('انتهى الوقت - لعبت أفضل قطعة')
+          if (result.newState.isGameOver) handleRoundEnd(result.newState.winner?.id === 'player-0')
+        }
+      } else {
+        handlePass()
+      }
+    } else {
+      handlePass()
+    }
+  }
+
+  const handleRestart = () => {
     soundEngine.playClick()
-    setScreen('menu')
+    setGameState(null)
+    setSelectedTile(null)
+    setMessage('')
+    setAiThinking(false)
+    setRoundEnded(false)
+    setHintMessage('')
+    setBestMove(null)
+    moveCountRef.current = 0
+    playerDrawCountRef.current = 0
+    playerHasDrawnRef.current = false
+    setTimerKey(prev => prev + 1)
+
+    setTimeout(() => {
+      try {
+        const aiCount = Math.min(Math.max(settings?.aiCount || 1, 1), 4)
+        const aiNames = getAINames(aiCount)
+        const aiAvatars = getAIAvatars(aiCount)
+        const allNames = [playerName || 'أنت', ...aiNames]
+        const allAvatars = [playerAvatar || '', ...aiAvatars]
+        const state = createInitialState(allNames, allAvatars)
+        setGameState(state)
+      } catch (error) {
+        console.error('خطأ في إعادة التشغيل:', error)
+      }
+    }, 100)
   }
 
   if (!gameState) {
     return (
-      <div className="screen-container table-bg">
-        <div className="text-white/60">جاري التحميل...</div>
+      <div className="screen-container table-bg flex items-center justify-center">
+        <div className="text-white text-xl animate-pulse">جاري التحميل...</div>
       </div>
     )
   }
 
-  const player = gameState.players[0]
   const currentPlayer = gameState.players[gameState.currentPlayerIndex]
+  const isPlayerTurn = gameState.currentPlayerIndex === 0
   const timeLimit = getTimeLimit()
-  const isPlayerTurn = gameState.currentPlayerIndex === 0 && !roundEnded
 
   return (
-    <div className="screen-container table-bg">
-      {/* Header */}
-      <div className="w-full flex items-center justify-between px-4 py-2">
-        <button onClick={handleExit} className="text-white/60 p-2">
-          <ArrowLeft size={24} />
-        </button>
-        <div className="text-center">
-          <div className="text-yellow-400 font-bold text-sm">
-            {settings.gameMode === 'classic' ? 'كلاسيك' : 
-             settings.gameMode === 'points' ? 'نقاط' :
-             settings.gameMode === 'block' ? 'حظر' :
-             settings.gameMode === 'allFives' ? 'الخمسات' : 'سحب'}
-          </div>
-          <div className="text-white/40 text-xs">
-            {gameState.players.length} لاعبين
-          </div>
-        </div>
-        <button onClick={() => {}} className="text-white/60 p-2">
-          <RotateCcw size={24} />
-        </button>
-      </div>
-
-      {/* Timer */}
-      {timeLimit > 0 && isPlayerTurn && (
-        <div className="w-full px-4 mb-1">
-          <TimerBar 
-            key={timerKey}
-            duration={timeLimit} 
-            onTimeUp={handleTimeUp} 
-            isActive={isPlayerTurn} 
-          />
-        </div>
-      )}
-
-      {/* Opponents Info */}
-      <div className="w-full px-4 py-1">
-        <div className="flex items-center justify-center gap-3 flex-wrap">
-          {gameState.players.slice(1).map((opponent, idx) => (
-            <div 
-              key={opponent.id}
-              className={`flex items-center gap-2 px-3 py-1 rounded-full ${
-                gameState.currentPlayerIndex === idx + 1 
-                  ? 'bg-yellow-500/20 border border-yellow-500/50' 
-                  : 'bg-white/5'
-              }`}
-            >
-              <div className="w-6 h-6 rounded-full bg-white/10 overflow-hidden">
-                <img src={opponent.avatar} alt="" className="w-full h-full object-cover" />
-              </div>
-              <span className="text-white/70 text-xs">{opponent.name}</span>
-              <span className="text-white/40 text-xs">({opponent.hand.length})</span>
-              {gameState.currentPlayerIndex === idx + 1 && aiThinking && (
-                <span className="text-yellow-400 text-xs animate-pulse">يفكر...</span>
-              )}
+    <div className="screen-container table-bg" ref={containerRef}>
+      <div className="flex flex-col h-full w-full max-w-lg mx-auto">
+        <div className="flex items-center justify-between p-3 bg-black/30 backdrop-blur-sm">
+          <button onClick={() => { soundEngine.playClick(); setScreen('menu'); }} className="text-white p-2 hover:bg-white/10 rounded-lg transition-colors">
+            <ArrowLeft size={24} />
+          </button>
+          <div className="text-center">
+            <div className="text-white/60 text-xs">{currentPlayer?.name || ''}</div>
+            <div className="text-yellow-400 font-bold text-sm">
+              {isPlayerTurn ? 'دورك' : `دور ${currentPlayer?.name || ''}`}
             </div>
-          ))}
+          </div>
+          <button onClick={handleRestart} className="text-white p-2 hover:bg-white/10 rounded-lg transition-colors">
+            <RotateCcw size={20} />
+          </button>
         </div>
-      </div>
 
-      {/* Snake Board */}
-      <div className="flex-1 flex items-center justify-center px-2 py-2 overflow-hidden">
-        <SnakeBoard board={gameState.board} />
-      </div>
-
-      {/* Message */}
-      {message && (
-        <div className="text-center px-4 py-1 text-sm font-medium text-yellow-400">
-          {message}
-        </div>
-      )}
-
-      {/* Hints */}
-      {hintMessage && settings.showHints && isPlayerTurn && (
-        <div className="text-center px-4 py-1">
-          <span className="text-white/50 text-xs flex items-center justify-center gap-1">
-            <Lightbulb size={12} />
-            {hintMessage}
-          </span>
-        </div>
-      )}
-
-      {/* Player Info */}
-      <div className="flex items-center gap-3 px-4 py-2">
-        <div className="w-10 h-10 rounded-full bg-yellow-500/20 overflow-hidden border-2 border-yellow-500">
-          <img src={player.avatar} alt="" className="w-full h-full object-cover" />
-        </div>
-        <div className="text-right">
-          <div className="text-yellow-400 font-medium text-sm">{player.name}</div>
-          <div className="text-white/40 text-xs">{player.hand.length} قطعة</div>
-        </div>
-        {settings.gameMode === 'allFives' && (
-          <div className="mr-auto text-yellow-400 font-bold">
-            {player.score} نقطة
+        {timeLimit > 0 && !roundEnded && (
+          <div className="px-3 pt-2">
+            <TimerBar
+              key={timerKey}
+              duration={timeLimit}
+              isActive={isPlayerTurn && !aiThinking}
+              onExpire={handleTimerExpire}
+            />
           </div>
         )}
-      </div>
 
-      {/* Player Hand */}
-      <div className="w-full px-4 pb-2">
-        <div className="player-hand justify-center">
-          {player.hand.map((tile, index) => {
-            const validEnds = getValidEnds(tile, gameState.board)
-            const isSelected = selectedTile === index
-            const isHinted = bestMove?.tileIndex === index
+        {message && (
+          <div className="mx-3 mt-2 px-3 py-1.5 bg-yellow-500/20 border border-yellow-500/40 rounded-lg text-yellow-300 text-sm text-center">
+            {message}
+          </div>
+        )}
 
-            return (
-              <div key={tile.id} className="relative">
-                <button
-                  onClick={() => handleTileClick(index)}
-                  disabled={!isPlayerTurn || roundEnded}
-                  className={`transition-transform ${
-                    isSelected ? 'scale-110 -translate-y-2' : ''
-                  } ${!isPlayerTurn || roundEnded ? 'opacity-50' : ''}`}
-                >
-                  <DominoTileComponent 
-                    tile={tile} 
-                    selected={isSelected}
-                    highlight={isHinted}
-                    size={player.hand.length > 10 ? 'sm' : player.hand.length > 7 ? 'md' : 'lg'}
-                  />
-                </button>
+        {aiThinking && (
+          <div className="text-center py-2">
+            <div className="inline-flex items-center gap-2 text-white/60 text-sm">
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              {currentPlayer?.name} يفكر...
+            </div>
+          </div>
+        )}
 
-                {isSelected && validEnds.length > 0 && (
-                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 flex gap-1">
-                    {validEnds.map((end) => (
-                      <button
-                        key={end}
-                        onClick={() => handlePlayTile(end)}
-                        className="bg-yellow-500 text-black text-xs px-2 py-1 rounded-full font-bold"
-                      >
-                        {end === 'left' ? '←' : '→'}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+        <div className="flex-1 min-h-0 px-3 py-2">
+          <SnakeBoard
+            state={gameState}
+            onPlayTile={handlePlayTile}
+            selectedTileIndex={selectedTile}
+          />
         </div>
-      </div>
 
-      {/* Action Buttons */}
-      <div className="flex gap-2 px-4 pb-4">
-        <button
-          onClick={handleDraw}
-          disabled={!isPlayerTurn || roundEnded || gameState.stock.length === 0}
-          className="game-btn game-btn-secondary flex-1 text-sm"
-        >
-          سحب ({gameState.stock.length})
-        </button>
-        <button
-          onClick={handleSkip}
-          disabled={!isPlayerTurn || roundEnded}
-          className="game-btn game-btn-secondary flex-1 text-sm"
-        >
-          تخطي
-        </button>
+        {hintMessage && !roundEnded && (
+          <div className="mx-3 mb-2 px-3 py-1.5 bg-blue-500/20 border border-blue-500/40 rounded-lg text-blue-300 text-xs text-center flex items-center justify-center gap-2">
+            <Lightbulb size={14} />
+            {hintMessage}
+          </div>
+        )}
+
+        <div className="bg-black/40 backdrop-blur-sm p-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-white text-sm font-bold">{playerName}</div>
+            <div className="text-white/60 text-xs">
+              {gameState.players[0]?.hand?.length || 0} قطع
+            </div>
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+            {gameState.players[0]?.hand?.map((tile, index) => {
+              const isSelected = selectedTile === index
+              const isPlayable = isPlayerTurn && !roundEnded && !aiThinking && getValidEnds(tile, gameState.board).length > 0
+              const isBestMove = bestMove?.tileIndex === index
+
+              return (
+                <div
+                  key={tile.id}
+                  onClick={() => handleTileClick(index)}
+                  className={`flex-shrink-0 cursor-pointer transition-all duration-200 ${
+                    isSelected ? 'scale-110 -translate-y-2' : ''
+                  } ${isBestMove && !isSelected ? 'ring-2 ring-yellow-400 rounded-lg' : ''}`}
+                >
+                  <DominoTileComponent
+                    tile={tile}
+                    selected={isSelected}
+                    playable={isPlayable}
+                    size="sm"
+                  />
+                </div>
+              )
+            })}
+          </div>
+
+          {isPlayerTurn && !roundEnded && !aiThinking && (
+            <div className="flex gap-2 mt-2">
+              {selectedTile !== null && (
+                <>
+                  <button
+                    onClick={() => handlePlayTile('left')}
+                    className="flex-1 py-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg font-bold text-sm transition-colors"
+                  >
+                    ⬅️ يسار
+                  </button>
+                  <button
+                    onClick={() => handlePlayTile('right')}
+                    className="flex-1 py-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg font-bold text-sm transition-colors"
+                  >
+                    يمين ➡️
+                  </button>
+                </>
+              )}
+              {selectedTile === null && (
+                <>
+                  <button
+                    onClick={handleDraw}
+                    disabled={settings?.gameMode === 'block'}
+                    className={`flex-1 py-2 rounded-lg font-bold text-sm transition-colors ${
+                      settings?.gameMode === 'block'
+                        ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                        : 'bg-blue-600 hover:bg-blue-500 text-white'
+                    }`}
+                  >
+                    📦 سحب
+                  </button>
+                  <button
+                    onClick={handlePass}
+                    className="flex-1 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg font-bold text-sm transition-colors"
+                  >
+                    ⏭️ تخطي
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
