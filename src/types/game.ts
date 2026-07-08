@@ -1,8 +1,5 @@
 export type TileEnd = 'left' | 'right'
 export type Direction = 'right' | 'left' | 'up' | 'down'
-export type GameMode = 'classic' | 'points' | 'block' | 'allFives' | 'draw'
-export type Difficulty = 'easy' | 'medium' | 'hard'
-export type TimerMode = 'off' | 'standard' | 'fast' | 'blitz' | 'custom'
 
 export interface DominoTile {
   id: string
@@ -15,8 +12,8 @@ export interface BoardTile extends DominoTile {
   y: number
   rotation: 0 | 90 | 180 | 270
   isLeft: boolean
-  startValue: number
-  endValue: number
+  top: number
+  bottom: number
 }
 
 export interface PathHead {
@@ -63,21 +60,18 @@ export interface MoveResult {
   newState?: GameState
 }
 
-// ============================================================
-// المفاتيح المفقودة التي كانت تسبب فشل الـ Build
-// ============================================================
-export const TIMER_CONFIG: Record<TimerMode, { label: string; time: number }> = {
+export const TIMER_CONFIG = {
   off: { label: 'بدون مؤقت', time: 0 },
-  standard: { label: 'قياسي (60 ثانية)', time: 60 },
-  fast: { label: 'سريع (30 ثانية)', time: 30 },
-  blitz: { label: 'خاطف (15 ثانية)', time: 15 },
+  standard: { label: 'قياسي', time: 60 },
+  fast: { label: 'سريع', time: 30 },
+  blitz: { label: 'خاطف', time: 15 },
   custom: { label: 'مخصص', time: 60 },
 }
 
-export const GAME_MODE_CONFIG: Record<GameMode, { label: string; icon: string; description: string }> = {
-  classic: { label: 'كلاسيك', icon: '🎯', description: 'العب حتى نفاذ القطع. الأقل نقاطاً يفوز.' },
+export const GAME_MODE_CONFIG = {
+  classic: { label: 'كلاسيك', icon: '🎯', description: 'العب حتى نفاذ القطع.' },
   points: { label: 'نقاط', icon: '📊', description: 'العب لعدد محدد من الجولات.' },
-  block: { label: 'حظر', icon: '🚫', description: 'بدون سحب. إذا توقفت اللعبة، يفوز الأقل نقاطاً.' },
-  allFives: { label: 'الخمسات', icon: '⭐', description: 'احصل على نقاط إضافية عند جعل الأطراف من مضاعفات الرقم 5.' },
-  draw: { label: 'سحب', icon: '🔄', description: 'اسحب القطع من المخزن عند عدم القدرة على اللعب.' },
+  block: { label: 'حظر', icon: '🚫', description: 'بدون سحب.' },
+  allFives: { label: 'الخمسات', icon: '⭐', description: 'احصل على نقاط إضافية.' },
+  draw: { label: 'سحب', icon: '🔄', description: 'اسحب القطع من المخزن.' },
 }
