@@ -89,26 +89,45 @@ export interface MatchState {
 }
 
 // ============================================================
-// SNAKE BOARD POSITION TRACKING
-// Each tile on the board has a position and rotation
+// CONNECTED DOMINO BOARD - Each tile connects to adjacent tiles
+// startValue = the number facing the center of the chain (connected side)
+// endValue = the number facing outward (open end)
 // ============================================================
 export interface BoardTile extends DominoTile {
-  // Grid position (row, col) in the snake layout
-  row: number
-  col: number
-  // Rotation: 0 = vertical, 90 = horizontal, 180 = vertical flipped, 270 = horizontal flipped
+  // Position on the board canvas (absolute coordinates)
+  x: number
+  y: number
+  // Rotation: 0 = vertical, 90 = horizontal right, 180 = vertical flipped, 270 = horizontal left
   rotation: number
-  // Which end of the domino chain this tile connects to
+  // Which end of the domino chain this tile was played on
   isLeft: boolean
+  // The value facing the inside of the chain (connected to adjacent tile)
+  startValue: number
+  // The value facing the outside of the chain (open for new connections)
+  endValue: number
 }
 
 export interface DominoTile {
-  top: number
-  bottom: number
-  id: string
+  top: number      // Number on top half (0-6)
+  bottom: number   // Number on bottom half (0-6)
+  id: string       // Unique identifier
 }
 
 export type TileEnd = 'left' | 'right'
+
+export interface PathHead {
+  x: number
+  y: number
+  direction: 'right' | 'left' | 'up' | 'down'
+  row: number
+}
+
+export interface BoardBounds {
+  minX: number
+  maxX: number
+  minY: number
+  maxY: number
+}
 
 export interface Player {
   id: string
@@ -127,16 +146,19 @@ export interface GameState {
   round: number
   isGameOver: boolean
   winner: Player | null
-  lastMove: { playerId: string; tile: DominoTile; end: TileEnd } | null
+  lastMove: { playerId: string; tile: BoardTile; end: TileEnd } | null
   isBlocked: boolean
-  // Snake layout tracking
-  snakeDirection: 'right' | 'left' | 'down'
-  snakeRow: number
-  snakeCol: number
-  maxRow: number
-  minRow: number
-  maxCol: number
-  minCol: number
+  // Snake layout tracking - tracks the open ends of the chain
+  leftHead: PathHead
+  rightHead: PathHead
+  // Bounds for the board canvas
+  bounds: BoardBounds
+}
+
+export interface MoveResult {
+  valid: boolean
+  message?: string
+  newState?: GameState
 }
 
 export const TIMER_CONFIG: Record<TimerMode, { time: number; label: string }> = {
