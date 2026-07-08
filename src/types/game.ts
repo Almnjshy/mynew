@@ -1,60 +1,114 @@
-export type TileEnd = 'left' | 'right'
-export type Direction = 'right' | 'left' | 'up' | 'down'
-
 export type Difficulty = 'easy' | 'medium' | 'hard'
 export type GameMode = 'classic' | 'points' | 'block' | 'allFives' | 'draw'
-export type TimerMode = 'off' | 'standard' | 'fast' | 'blitz' | 'custom'
+export type TimerMode = 'off' | 'blitz' | 'rapid' | 'custom'
 
-export type Screen = 
-  | 'title' 
-  | 'menu' 
-  | 'levelSelect' 
-  | 'game' 
-  | 'matchEnd' 
-  | 'settings' 
-  | 'statistics' 
-  | 'achievements' 
-  | 'history' 
-  | 'profile' 
-  | 'leaderboard' 
-  | 'wifiGame' 
-  | 'onlineGame'
-  | 'tournamentMenu'
-  | 'tournamentCreate'
-  | 'tournamentBracket'
-  | 'tournamentGame'
-  | 'tournamentHistory'
+export interface GameSettings {
+  soundEnabled: boolean
+  musicEnabled: boolean
+  difficulty: Difficulty
+  showHints: boolean
+  gameMode: GameMode
+  targetScore: number
+  timerMode: TimerMode
+  customTime: number
+  aiCount: number
+}
+
+export interface GameRecord {
+  id: string
+  date: string
+  playerName: string
+  opponentName: string
+  result: 'win' | 'loss' | 'draw'
+  gameMode: GameMode
+  difficulty: Difficulty
+  rounds: number
+  playerScore: number
+  opponentScore: number
+  targetScore?: number
+  duration?: number
+}
+
+export interface LeaderboardEntry {
+  name: string
+  score: number
+  avatar: string
+  date: string
+}
+
+export interface Statistics {
+  gamesPlayed: number
+  gamesWon: number
+  gamesLost: number
+  totalScore: number
+  highestScore: number
+  totalTime: number
+  bestTime: number
+  draws: number
+  winStreak: number
+  bestWinStreak: number
+}
+
+export interface Achievement {
+  id: string
+  title: string
+  description: string
+  icon: string
+  condition: AchievementCondition
+  unlockedAt: string | null
+  progress: number
+  maxProgress: number
+  rarity: 'common' | 'rare' | 'epic' | 'legendary'
+}
+
+export interface AchievementCondition {
+  type: 'wins' | 'games_played' | 'streak' | 'clean_win' | 'crushing_win' | 'moves' | 'draws' | 'comeback'
+  value: number
+}
+
+export interface AchievementProgress {
+  totalWins: number
+  totalGames: number
+  currentStreak: number
+  bestStreak: number
+  cleanWins: number
+  crushingWins: number
+  fastestWinMoves: number
+  totalDraws: number
+  comebacks: number
+}
+
+export interface MatchState {
+  round: number
+  playerScore: number
+  aiScore: number
+  targetScore: number
+  scores: { player: number; ai: number }[]
+  playerTotal: number
+  opponentTotal: number
+}
+
+// ============================================================
+// SNAKE BOARD POSITION TRACKING
+// Each tile on the board has a position and rotation
+// ============================================================
+export interface BoardTile extends DominoTile {
+  // Grid position (row, col) in the snake layout
+  row: number
+  col: number
+  // Rotation: 0 = vertical, 90 = horizontal, 180 = vertical flipped, 270 = horizontal flipped
+  rotation: number
+  // Which end of the domino chain this tile connects to
+  isLeft: boolean
+}
 
 export interface DominoTile {
+  top: number
+  bottom: number
   id: string
-  top: number
-  bottom: number
 }
 
-export interface BoardTile extends DominoTile {
-  x: number
-  y: number
-  rotation: 0 | 90 | 180 | 270
-  isLeft: boolean
-  top: number
-  bottom: number
-  startValue: number
-  endValue: number
-}
-
-export interface PathHead {
-  x: number
-  y: number
-  direction: Direction
-  row: number
-}
-
-export interface BoardBounds {
-  minX: number
-  maxX: number
-  minY: number
-  maxY: number
-}
+export type TileEnd = 'left' | 'right'
 
 export interface Player {
   id: string
@@ -73,90 +127,37 @@ export interface GameState {
   round: number
   isGameOver: boolean
   winner: Player | null
-  lastMove: { playerId: string; tile: BoardTile; end: TileEnd } | null
+  lastMove: { playerId: string; tile: DominoTile; end: TileEnd } | null
   isBlocked: boolean
-  leftHead: PathHead
-  rightHead: PathHead
-  bounds: BoardBounds
+  // Snake layout tracking
+  snakeDirection: 'right' | 'left' | 'down'
+  snakeRow: number
+  snakeCol: number
+  maxRow: number
+  minRow: number
+  maxCol: number
+  minCol: number
 }
 
-export interface MoveResult {
-  valid: boolean
-  message?: string
-  newState?: GameState
+export const TIMER_CONFIG: Record<TimerMode, { time: number; label: string }> = {
+  off: { time: 0, label: 'بدون' },
+  blitz: { time: 15, label: 'سريع' },
+  rapid: { time: 30, label: 'متوسط' },
+  custom: { time: 0, label: 'مخصص' },
 }
 
-export interface GameSettings {
-  soundEnabled: boolean
-  musicEnabled: boolean
-  difficulty: Difficulty
-  showHints: boolean
-  gameMode: GameMode
-  targetScore: number
-  timerMode: TimerMode
-  customTime: number
-  aiCount: number
+export const GAME_MODE_CONFIG: Record<GameMode, { label: string; desc: string }> = {
+  classic: { label: 'كلاسيكي', desc: 'الأول ينتهي يفوز' },
+  points: { label: 'نقاط', desc: 'وصل الهدف أولاً' },
+  block: { label: 'بلوك', desc: 'منع الخصم' },
+  allFives: { label: 'الخمسات', desc: 'مجموع 5 يعطي نقاط' },
+  draw: { label: 'السحب', desc: 'اسحب من المخزون' },
 }
 
-export interface Statistics {
-  gamesPlayed: number
-  gamesWon: number
-  gamesLost: number
-  totalScore: number
-  highestScore: number
-  totalTime: number
-  bestTime: number
-  draws: number
-  winStreak: number
-  bestWinStreak: number
-}
-
-export interface GameRecord {
-  id: string
-  date: string
-  playerName: string
-  opponentName: string
-  playerScore: number
-  opponentScore: number
-  won: boolean
-  gameMode: GameMode
-  moves: number
-  duration: number
-}
-
-export interface LeaderboardEntry {
-  id: string
-  name: string
-  avatar: string
-  score: number
-  date: string
-  gameMode: GameMode
-}
-
-export interface MatchState {
-  round: number
-  playerScore: number
-  aiScore: number
-  targetScore: number
-  scores: { player: number; ai: number }[]
-  playerTotal: number
-  opponentTotal: number
-  isMatchOver: boolean
-  matchWinner: string | null
-}
-
-export const TIMER_CONFIG: Record<TimerMode, { label: string; time: number; icon?: string }> = {
-  off: { label: 'بدون مؤقت', time: 0, icon: '⏸️' },
-  standard: { label: 'قياسي', time: 60, icon: '⏱️' },
-  fast: { label: 'سريع', time: 30, icon: '⚡' },
-  blitz: { label: 'خاطف', time: 15, icon: '🔥' },
-  custom: { label: 'مخصص', time: 60, icon: '⚙️' },
-}
-
-export const GAME_MODE_CONFIG: Record<GameMode, { label: string; icon: string; description: string }> = {
-  classic: { label: 'كلاسيك', icon: '🎯', description: 'العب حتى نفاذ القطع.' },
-  points: { label: 'نقاط', icon: '📊', description: 'العب لعدد محدد من الجولات.' },
-  block: { label: 'حظر', icon: '🚫', description: 'بدون سحب.' },
-  allFives: { label: 'الخمسات', icon: '⭐', description: 'احصل على نقاط إضافية.' },
-  draw: { label: 'سحب', icon: '🔄', description: 'اسحب القطع من المخزن.' },
-}
+// Screen types including tournament screens
+export type Screen = 
+  | 'title' | 'menu' | 'levelSelect' | 'game' | 'matchEnd' 
+  | 'settings' | 'statistics' | 'achievements' | 'history' 
+  | 'profile' | 'leaderboard' | 'wifiGame' | 'onlineGame'
+  | 'tournamentMenu' | 'tournamentCreate' | 'tournamentBracket' 
+  | 'tournamentGame' | 'tournamentHistory'
